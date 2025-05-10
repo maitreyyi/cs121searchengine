@@ -21,7 +21,7 @@ pip install -r requirements.txt
 ```
 
 ### 4. Download and extract dataset
-Download developer.zip and extract into /data
+Download Algorithms and data structures developer: larger collection of web pages ---> developer.zip and extract into /data
 
 ### 5.  Run indexer
 ```bash
