@@ -11,9 +11,8 @@ cd cs121searchengine
 ```bash
 python3 -m venv venv
 
-Unix: source venv/bin/activate  
+Unix and Mac: source venv/bin/activate  
 Windows: venv\Scripts\activate
-Mac: venv activate
 ```
 
 ### 3. Install dependencies
