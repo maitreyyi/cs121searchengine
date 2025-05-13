@@ -22,7 +22,7 @@ stemmer = PorterStemmer()
 def tokenize(text):
     soup = BeautifulSoup(text, "html.parser")
     clean_text= soup.get_text(separator=" ", strip=True)
-    return re.findall(r'\b[a-zA-Z0-9]+\b', clean_text.lower())
+    return [token for token in re.findall(r'\b[a-zA-Z0-9]+\b', clean_text.lower()) if not token.isdigit()]
 
 def stem_tokens(tokens):
     #porter stemming
