@@ -7,7 +7,6 @@ import re
 import nltk
 from collections import defaultdict
 from nltk.stem import PorterStemmer
-import uuid
 
 nltk.download('punkt')
 
@@ -36,6 +35,9 @@ def flush_partial_index(index, flush_id):
 
 #merging the flushes
 def merge_indices(partial_dir):
+    if not os.path.isdir(partial_dir):
+        print(f"No partial index directory found at {partial_dir}, skipping merge.")
+        return defaultdict(dict)
     final_index = defaultdict(dict)
     for filename in os.listdir(partial_dir):
         if filename.endswith(".json"):
@@ -60,7 +62,7 @@ def build_index():
 
     for root, _, files in os.walk(DATA_DIR):
         for file in files:
-            if not file.endwith(".json"): #invalid file
+            if not file.endswith(".json"): #invalid file
                 continue
             try:
                 with open(os.path.join(root, file), "r", encoding = "utf-8") as f:
