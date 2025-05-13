@@ -62,6 +62,11 @@ def build_index():
     temp_index = defaultdict(lambda: defaultdict(int))
     doc_count = 0
     flush_id = 0
+    
+    #for clean build, comment out if building on top
+    if os.path.exists(PARTIAL_INDEX_DIR):
+        for f in os.listdir(PARTIAL_INDEX_DIR):
+            os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
 
     for root, _, files in os.walk(DATA_DIR):
         for file in files:
