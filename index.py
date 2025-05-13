@@ -3,7 +3,7 @@ Builds inverted index from the given dataset of HTML pages (JSON files)
 '''
 import os
 import json
-import re
+import bs4 as BeautifulSoup
 import nltk
 from collections import defaultdict
 from nltk.stem import PorterStemmer
@@ -19,7 +19,8 @@ PARTIAL_FLUSH_LIMIT = 5000
 stemmer = PorterStemmer()
 
 def tokenize(text):
-    return re.findall(r'\b\w+\b', text.lower())
+    soup = BeautifulSoup(text, "html.parser")
+    return soup.get_text(separator=" ", strip=True)
 
 def stem_tokens(tokens):
     #porter stemming
