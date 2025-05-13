@@ -72,12 +72,15 @@ def build_index():
                     content = page.get("content","")
                     tokens = stem_tokens(tokenize(content)) #stemming tokens
                     for token in tokens:
+                        print("Doc id: ", doc_id, " token: ", token)
                         temp_index[token][doc_id] +=1
                     doc_count +=1
+                    print("Doc count: ", doc_count)
             except Exception as e:
                 print(f"Error reading {file}: {e}")
             
             if doc_count % PARTIAL_FLUSH_LIMIT == 0:
+                print("Flushing...")
                 flush_partial_index(temp_index, flush_id)
                 flush_id +=1
                 temp_index.clear()
