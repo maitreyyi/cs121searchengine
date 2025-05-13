@@ -5,6 +5,7 @@ import os
 import json
 from bs4 import BeautifulSoup
 import nltk
+from nltk.tokenize import word_tokenize
 from collections import defaultdict
 from nltk.stem import PorterStemmer
 
@@ -20,7 +21,8 @@ stemmer = PorterStemmer()
 
 def tokenize(text):
     soup = BeautifulSoup(text, "html.parser")
-    return soup.get_text(separator=" ", strip=True)
+    clean_text= soup.get_text(separator=" ", strip=True)
+    return word_tokenize(clean_text)
 
 def stem_tokens(tokens):
     #porter stemming
