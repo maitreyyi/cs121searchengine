@@ -3,7 +3,7 @@ Builds inverted index from the given dataset of HTML pages (JSON files)
 '''
 import os
 import json
-import bs4 as BeautifulSoup
+from bs4 import BeautifulSoup
 import nltk
 from collections import defaultdict
 from nltk.stem import PorterStemmer
