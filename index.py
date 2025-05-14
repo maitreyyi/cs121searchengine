@@ -77,10 +77,12 @@ def build_index():
                     page = json.load(f)
                     doc_id = page.get("url")
                     content = page.get("content","")
-                    tokens = stem_tokens(tokenize(content)) #stemming tokens
-                    for token in tokens:
+                    tokens = stem_tokens(tokenize(content))  # stemming tokens
+                    unique_tokens = set(tokens)  # remove duplicates
+                    for token in unique_tokens:
                         print("Doc id: ", doc_id, " token: ", token)
-                        temp_index[token][doc_id] +=1
+                        temp_index[token][doc_id] += 1
+
                     doc_count +=1
                     print("Doc count: ", doc_count)
             except Exception as e:
