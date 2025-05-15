@@ -28,6 +28,9 @@ def tokenize(text):
 def stem_tokens(tokens):
     return [stemmer.stem(token) for token in tokens]
 
+def stable_hash_url(url):
+    return int(hashlib.md5(url.encode()).hexdigest()[:8], 16)
+
 def flush_partial_index(index, flush_id):
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
     filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.json")
@@ -85,9 +88,15 @@ def build_index():
             try:
                 with open(os.path.join(root, file), "r", encoding="utf-8") as f:
                     page = json.load(f)
-                    doc_id = page.get("url")
+                    
+                    try:
+                        doc_id = stable_hash_url(page.get("url"))
+                    except ValueError:
+                        continue  # or log and skip problematic URLs
+
                     content = page.get("content", "")
                     tokens = stem_tokens(tokenize(content))
+                    
                     for token in tokens:
                         temp_index[token][doc_id] += 1
 
