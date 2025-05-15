@@ -24,31 +24,42 @@ def tokenize(text):
     clean_text = soup.get_text(separator=" ", strip=True)
     tokens = re.findall(r'\b[a-zA-Z0-9]+\b', clean_text.lower())
     return [token for token in tokens if not token.isdigit() and len(token) > 1]
+
 def stem_tokens(tokens):
-    #porter stemming
     return [stemmer.stem(token) for token in tokens]
 
-#write in-memory index to disk periodically instead of holding the entire inverted index in memory until the end
 def flush_partial_index(index, flush_id):
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
     filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.json")
+
+    # Wrap each frequency count in {"tf": value}
+    converted_index = {
+        token: {doc_id: {"tf": tf} for doc_id, tf in doc_freqs.items()}
+        for token, doc_freqs in index.items()
+    }
+
     with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(index, f)
+        json.dump(converted_index, f)
     print(f"Flushed partial index: {filename}")
 
-#merging the flushes
 def merge_indices(partial_dir):
     if not os.path.isdir(partial_dir):
         print(f"No partial index directory found at {partial_dir}, skipping merge.")
         return defaultdict(dict)
+
     final_index = defaultdict(dict)
+
     for filename in os.listdir(partial_dir):
         if filename.endswith(".json"):
             with open(os.path.join(partial_dir, filename), 'r', encoding='utf-8') as f:
                 partial = json.load(f)
                 for token, postings in partial.items():
-                    for doc_id, tf in postings.items():
-                        final_index[token][doc_id] = final_index[token].get(doc_id, 0) + tf
+                    for doc_id, posting in postings.items():
+                        tf = posting.get("tf", 0)
+                        if doc_id not in final_index[token]:
+                            final_index[token][doc_id] = {"tf": tf}
+                        else:
+                            final_index[token][doc_id]["tf"] += tf
     return final_index
 
 def write_analytics(index, doc_count):
@@ -62,37 +73,35 @@ def build_index():
     temp_index = defaultdict(lambda: defaultdict(int))
     doc_count = 0
     flush_id = 0
-    
-    #for clean build, comment out if building on top
+
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
             os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
 
     for root, _, files in os.walk(DATA_DIR):
         for file in files:
-            if not file.endswith(".json"): #invalid file
+            if not file.endswith(".json"):
                 continue
             try:
-                with open(os.path.join(root, file), "r", encoding = "utf-8") as f:
+                with open(os.path.join(root, file), "r", encoding="utf-8") as f:
                     page = json.load(f)
                     doc_id = page.get("url")
-                    content = page.get("content","")
-                    tokens = stem_tokens(tokenize(content))  # stemming tokens
-                    unique_tokens = set(tokens)  # remove duplicates
-                    for token in unique_tokens:
-                        print("Doc id: ", doc_id, " token: ", token)
+                    content = page.get("content", "")
+                    tokens = stem_tokens(tokenize(content))
+                    for token in tokens:
                         temp_index[token][doc_id] += 1
 
-                    doc_count +=1
+                    doc_count += 1
                     print("Doc count: ", doc_count)
             except Exception as e:
                 print(f"Error reading {file}: {e}")
-            
+
             if doc_count % PARTIAL_FLUSH_LIMIT == 0:
                 print("Flushing...")
                 flush_partial_index(temp_index, flush_id)
-                flush_id +=1
+                flush_id += 1
                 temp_index.clear()
+
     if temp_index:
         flush_partial_index(temp_index, flush_id)
 
@@ -104,7 +113,6 @@ def build_index():
 
     write_analytics(final_index, doc_count)
     print(f"Indexing complete. Total documents: {doc_count}")
-
 
 if __name__ == "__main__":
     build_index()
