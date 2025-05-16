@@ -88,7 +88,7 @@ def build_index():
     doc_count = 0
     flush_id = 0
     doc_map = {}
-
+    
     if os.path.exists(DOC_MAP_DIR):
         for f in os.listdir(DOC_MAP_DIR):
             os.remove(os.path.join(DOC_MAP_DIR, f))
@@ -135,8 +135,6 @@ def build_index():
 
     if temp_index:
         flush_partial_index(temp_index, flush_id)
-        
-        os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
         with open(os.path.join(DOC_MAP_DIR, f"doc_map_part_{flush_id}.json"), "w", encoding="utf-8") as f:
             json.dump(doc_map, f)
         doc_map.clear()
@@ -148,4 +146,5 @@ def build_index():
     merge_doc_maps(DOC_MAP_DIR)
 
 if __name__ == "__main__":
+    os.makedirs(DOC_MAP_DIR, exist_ok=True)
     build_index()
