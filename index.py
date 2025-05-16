@@ -135,6 +135,8 @@ def build_index():
 
     if temp_index:
         flush_partial_index(temp_index, flush_id)
+        
+        os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
         with open(os.path.join(DOC_MAP_DIR, f"doc_map_part_{flush_id}.json"), "w", encoding="utf-8") as f:
             json.dump(doc_map, f)
         doc_map.clear()
