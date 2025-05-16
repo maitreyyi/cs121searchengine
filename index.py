@@ -8,10 +8,12 @@ import nltk
 import re
 from collections import defaultdict
 from nltk.stem import PorterStemmer
+import hashlib
 
 nltk.download('punkt')
 
 DATA_DIR = "data"
+DOC_MAP_DIR = "doc_maps"
 PARTIAL_INDEX_DIR = "partial_indices"
 FINAL_INDEX = "index.json"
 ANALYTICS_FILE = "analytics.txt"
@@ -72,10 +74,25 @@ def write_analytics(index, doc_count):
         f.write(f"Unique tokens: {len(index)}\n")
         f.write(f"Index size on disk: {index_size_kb} KB\n")
 
+def merge_doc_maps(doc_map_dir):
+    merged = {}
+    for file in os.listdir(doc_map_dir):
+        if file.endswith(".json"):
+            with open(os.path.join(doc_map_dir, file), "r", encoding="utf-8") as f:
+                merged.update(json.load(f))
+    with open("doc_map.json", "w", encoding="utf-8") as f:
+        json.dump(merged, f)
+
 def build_index():
     temp_index = defaultdict(lambda: defaultdict(int))
     doc_count = 0
     flush_id = 0
+    doc_map = {}
+
+    if os.path.exists(DOC_MAP_DIR):
+        for f in os.listdir(DOC_MAP_DIR):
+            os.remove(os.path.join(DOC_MAP_DIR, f))
+
 
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
@@ -91,6 +108,7 @@ def build_index():
                     
                     try:
                         doc_id = stable_hash_url(page.get("url"))
+                        doc_map[doc_id] = page.get("url")
                     except ValueError:
                         continue  # or log and skip problematic URLs
 
@@ -108,20 +126,24 @@ def build_index():
             if doc_count % PARTIAL_FLUSH_LIMIT == 0:
                 print("Flushing...")
                 flush_partial_index(temp_index, flush_id)
+
+                with open(os.path.join(DOC_MAP_DIR, f"doc_map_part_{flush_id}.json"), "w", encoding="utf-8") as f:
+                    json.dump(doc_map,f)
+                doc_map.clear()
                 flush_id += 1
                 temp_index.clear()
 
     if temp_index:
         flush_partial_index(temp_index, flush_id)
+        with open(os.path.join(DOC_MAP_DIR, f"doc_map_part_{flush_id}.json"), "w", encoding="utf-8") as f:
+            json.dump(doc_map, f)
+        doc_map.clear()
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
-
-    with open(FINAL_INDEX, 'w', encoding='utf-8') as f:
-        json.dump(final_index, f)
-
     write_analytics(final_index, doc_count)
     print(f"Indexing complete. Total documents: {doc_count}")
+    merge_doc_maps(DOC_MAP_DIR)
 
 if __name__ == "__main__":
     build_index()
