@@ -207,6 +207,6 @@ def search_interface():
 
 
 if __name__ == "__main__":
-    os.makedirs(DOC_MAP_DIR, exist_ok=True)
-    build_index()
+    #os.makedirs(DOC_MAP_DIR, exist_ok=True)
+    #build_index()
     search_interface()
