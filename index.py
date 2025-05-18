@@ -9,6 +9,7 @@ import re
 from collections import defaultdict
 from nltk.stem import PorterStemmer
 import hashlib
+import string
 
 nltk.download('punkt')
 
@@ -138,21 +139,23 @@ def build_index():
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
+    split_index_by_prefix(final_index)
     write_analytics(final_index, doc_count)
     print(f"Indexing complete. Total documents: {doc_count}")
 
-def load_postings_for_term(term):
-    postings = {}
+def load_postings_for_term(term, index_dir="final_index"):
+    prefix = term[0].lower() if term[0].isalpha() else "other"
+    filepath = os.path.join(index_dir, f"index_{prefix}.json")
 
-    for filename in os.listdir(PARTIAL_INDEX_DIR):
-        if filename.endswith(".json"):
-            filepath = os.path.join(PARTIAL_INDEX_DIR, filename)
-            with open(filepath, 'r', encoding="utf-8") as f:
-                index = json.load(f)
-                if term in index:
-                    for doc_id, data in index[term].items():
-                        postings[doc_id] = data.get("tf", 0)
-    return postings
+    if not os.path.exists(filepath):
+        return {}
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        index = json.load(f)
+
+    if term in index:
+        return {doc_id: posting["tf"] for doc_id, posting in index[term].items()}
+    return {}
     
 
 def search_interface():
@@ -184,6 +187,28 @@ def search_interface():
                 print("No documents matched all query terms.")
         else:
             print("No matching documents.")
+
+
+# Split index by prefix (a-z and 'other'), write index_{prefix}.json files
+def split_index_by_prefix(final_index, output_dir="final_index"):
+    os.makedirs(output_dir, exist_ok=True)
+
+    split_index = {ch: {} for ch in string.ascii_lowercase}
+    split_index["other"] = {}
+
+    for term, postings in final_index.items():
+        prefix = term[0].lower()
+        if prefix in split_index:
+            split_index[prefix][term] = postings
+        else:
+            split_index["other"][term] = postings
+
+    for prefix, index_chunk in split_index.items():
+        path = os.path.join(output_dir, f"index_{prefix}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(index_chunk, f)
+        print(f"Wrote: {path}")
+
 if __name__ == "__main__":
     #os.makedirs(DOC_MAP_DIR, exist_ok=True)
     #build_index()
