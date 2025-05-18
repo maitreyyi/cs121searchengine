@@ -145,6 +145,52 @@ def build_index():
     print(f"Indexing complete. Total documents: {doc_count}")
     merge_doc_maps(DOC_MAP_DIR)
 
+
+def search_interface():
+    print("Loading index and document map...")
+    with open(FINAL_INDEX, "r", encoding="utf-8") as f:
+        index = json.load(f)
+
+    with open("doc_map.json", "r", encoding="utf-8") as f:
+        doc_map = json.load(f)
+
+    print("Ready to accept queries (type 'exit' to quit).")
+
+    while True:
+        query = input("\nEnter query: ").strip()
+        if query.lower() == "exit":
+            break
+
+        query_tokens = stem_tokens(tokenize(query))
+
+        if not query_tokens:
+            print("No valid tokens in query.")
+            continue
+
+        # Retrieve sets of doc_ids for each token
+        matching_doc_ids = []
+        for token in query_tokens:
+            postings = index.get(token)
+            if postings:
+                matching_doc_ids.append(set(postings.keys()))
+            else:
+                matching_doc_ids.append(set())
+
+        if not matching_doc_ids:
+            print("No matching documents.")
+            continue
+
+        # AND-only intersection
+        result_ids = set.intersection(*matching_doc_ids)
+        if not result_ids:
+            print("No matching documents found.")
+        else:
+            print("Matching URLs:")
+            for doc_id in result_ids:
+                print("-", doc_map.get(doc_id, f"(Missing URL for {doc_id})"))
+
+
 if __name__ == "__main__":
     os.makedirs(DOC_MAP_DIR, exist_ok=True)
     build_index()
+    search_interface()
