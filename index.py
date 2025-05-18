@@ -13,7 +13,6 @@ import hashlib
 nltk.download('punkt')
 
 DATA_DIR = "data"
-DOC_MAP_DIR = "doc_maps"
 PARTIAL_INDEX_DIR = "partial_indices"
 FINAL_INDEX = "index.json"
 ANALYTICS_FILE = "analytics.txt"
@@ -90,26 +89,12 @@ def write_analytics(index, doc_count):
         f.write(f"Unique tokens: {len(index)}\n")
         f.write(f"Index size on disk: {index_size_kb} KB\n")
 
-def merge_doc_maps(doc_map_dir):
-    merged = {}
-    for file in os.listdir(doc_map_dir):
-        if file.endswith(".json"):
-            with open(os.path.join(doc_map_dir, file), "r", encoding="utf-8") as f:
-                merged.update(json.load(f))
-    with open("doc_map.json", "w", encoding="utf-8") as f:
-        json.dump(merged, f)
-
 def build_index():
     temp_index = defaultdict(lambda: defaultdict(int))
     doc_count = 0
     flush_id = 0
     doc_map = {}
     
-    if os.path.exists(DOC_MAP_DIR):
-        for f in os.listdir(DOC_MAP_DIR):
-            os.remove(os.path.join(DOC_MAP_DIR, f))
-
-
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
             os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
@@ -142,70 +127,63 @@ def build_index():
             if doc_count % PARTIAL_FLUSH_LIMIT == 0:
                 print("Flushing...")
                 flush_partial_index(temp_index, flush_id)
-
-                with open(os.path.join(DOC_MAP_DIR, f"doc_map_part_{flush_id}.json"), "w", encoding="utf-8") as f:
-                    json.dump(doc_map,f)
-                doc_map.clear()
                 flush_id += 1
                 temp_index.clear()
 
     if temp_index:
         flush_partial_index(temp_index, flush_id)
-        with open(os.path.join(DOC_MAP_DIR, f"doc_map_part_{flush_id}.json"), "w", encoding="utf-8") as f:
-            json.dump(doc_map, f)
-        doc_map.clear()
+
+    with open("doc_map.json", "w", encoding="utf-8") as f:
+        json.dump(doc_map, f)
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
     write_analytics(final_index, doc_count)
     print(f"Indexing complete. Total documents: {doc_count}")
-    merge_doc_maps(DOC_MAP_DIR)
 
+def load_postings_for_term(term):
+    postings = {}
+
+    for filename in os.listdir(PARTIAL_INDEX_DIR):
+        if filename.endswith(".json"):
+            filepath = os.path.join(PARTIAL_INDEX_DIR, filename)
+            with open(filepath, 'r', encoding="utf-8") as f:
+                index = json.load(f)
+                if term in index:
+                    for doc_id, data in index[term].items():
+                        postings[doc_id] = data.get("tf", 0)
+    return postings
+    
 
 def search_interface():
-    print("Loading index and document map...")
-    with open(FINAL_INDEX, "r", encoding="utf-8") as f:
-        index = json.load(f)
-
-    with open("doc_map.json", "r", encoding="utf-8") as f:
-        doc_map = json.load(f)
-
-    print("Ready to accept queries (type 'exit' to quit).")
+    # Load doc_map.json for mapping doc_ids to URLs
+    try:
+        with open("doc_map.json", "r", encoding="utf-8") as f:
+            doc_map = json.load(f)
+    except Exception as e:
+        print(f"Could not load doc_map.json: {e}")
+        doc_map = {}
 
     while True:
         query = input("\nEnter query: ").strip()
-        if query.lower() == "exit":
-            break
+        terms = query.lower().split()
+        terms = [stemmer.stem(t) for t in terms]
 
-        query_tokens = stem_tokens(tokenize(query))
+        all_postings = []
+        for term in terms:
+            postings = load_postings_for_term(term)
+            all_postings.append(set(postings))
 
-        if not query_tokens:
-            print("No valid tokens in query.")
-            continue
-
-        # Retrieve sets of doc_ids for each token
-        matching_doc_ids = []
-        for token in query_tokens:
-            postings = index.get(token)
-            if postings:
-                matching_doc_ids.append(set(postings.keys()))
+        if all_postings:
+            result = set.intersection(*all_postings)
+            if result:
+                print("Matching URLs:")
+                for doc_id in sorted(result):
+                    print("-", doc_map.get(str(doc_id), f"[Missing URL for {doc_id}]"))
             else:
-                matching_doc_ids.append(set())
-
-        if not matching_doc_ids:
-            print("No matching documents.")
-            continue
-
-        # AND-only intersection
-        result_ids = set.intersection(*matching_doc_ids)
-        if not result_ids:
-            print("No matching documents found.")
+                print("No documents matched all query terms.")
         else:
-            print("Matching URLs:")
-            for doc_id in result_ids:
-                print("-", doc_map.get(doc_id, f"(Missing URL for {doc_id})"))
-
-
+            print("No matching documents.")
 if __name__ == "__main__":
     #os.makedirs(DOC_MAP_DIR, exist_ok=True)
     #build_index()
