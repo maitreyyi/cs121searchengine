@@ -210,6 +210,5 @@ def split_index_by_prefix(final_index, output_dir="final_index"):
         print(f"Wrote: {path}")
 
 if __name__ == "__main__":
-    #os.makedirs(DOC_MAP_DIR, exist_ok=True)
-    #build_index()
+    build_index() #run once, only re-run if data changes
     search_interface()
