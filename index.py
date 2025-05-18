@@ -22,8 +22,24 @@ PARTIAL_FLUSH_LIMIT = 5000
 stemmer = PorterStemmer()
 
 def tokenize(text):
-    soup = BeautifulSoup(text, "html.parser")
-    clean_text = soup.get_text(separator=" ", strip=True)
+    # soup = BeautifulSoup(text, "html.parser")
+    # clean_text = soup.get_text(separator=" ", strip=True)
+    # try:
+    #     soup = BeautifulSoup(text, features="xml")
+    #     clean_text = soup.get_text(separator=" ", strip=True)
+    # except Exception:
+    #     soup = BeautifulSoup(text, "html.parser")
+    #     clean_text = soup.get_text(separator=" ", strip=True)
+    # tokens = re.findall(r'\b[a-zA-Z0-9]+\b', clean_text.lower())
+    # return [token for token in tokens if not token.isdigit() and len(token) > 1]
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", XMLParsedAsHTMLWarning)
+            soup = BeautifulSoup(text, features="xml")
+        clean_text = soup.get_text(separator=" ", strip=True)
+    except Exception:
+        soup = BeautifulSoup(text, "html.parser")
+        clean_text = soup.get_text(separator=" ", strip=True)
     tokens = re.findall(r'\b[a-zA-Z0-9]+\b', clean_text.lower())
     return [token for token in tokens if not token.isdigit() and len(token) > 1]
 
