@@ -15,6 +15,8 @@ from math import log
 
 nltk.download('punkt')
 
+STOPWORDS = {"a", "an", "the", "of", "on", "in", "for", "and", "to", "with"}
+
 DATA_DIR = "data"
 PARTIAL_INDEX_DIR = "partial_indices"
 FINAL_INDEX = "index.json"
@@ -118,7 +120,7 @@ def build_index():
 
                     content = page.get("content", "")
                     tokens = stem_tokens(tokenize(content))
-                    
+            
                     for token in tokens:
                         temp_index[token][doc_id] += 1
 
@@ -183,7 +185,7 @@ def search_interface():
 
     while True:
         query = input("\nEnter query: ").strip()
-        terms = query.lower().split()
+        terms = [t for t in query.lower().split() if t not in STOPWORDS]
         terms = [stemmer.stem(t) for t in terms]
 
         scores = defaultdict(float)
