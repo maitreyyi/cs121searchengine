@@ -10,6 +10,8 @@ from collections import defaultdict
 from nltk.stem import PorterStemmer
 import hashlib
 import string
+from math import log
+
 
 nltk.download('punkt')
 
@@ -137,6 +139,9 @@ def build_index():
     with open("doc_map.json", "w", encoding="utf-8") as f:
         json.dump(doc_map, f)
 
+    with open("doc_stats.json", "w", encoding="utf-8") as f:
+        json.dump({"doc_count": doc_count}, f)
+
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
     split_index_by_prefix(final_index)
@@ -148,14 +153,16 @@ def load_postings_for_term(term, index_dir="final_index"):
     filepath = os.path.join(index_dir, f"index_{prefix}.json")
 
     if not os.path.exists(filepath):
-        return {}
+        return {}, 0
 
     with open(filepath, "r", encoding="utf-8") as f:
         index = json.load(f)
 
     if term in index:
-        return {doc_id: posting["tf"] for doc_id, posting in index[term].items()}
-    return {}
+        postings = {doc_id: posting["tf"] for doc_id, posting in index[term].items()}
+        df = len(postings)
+        return postings, df
+    return {}, 0
     
 
 def search_interface():
@@ -166,27 +173,34 @@ def search_interface():
     except Exception as e:
         print(f"Could not load doc_map.json: {e}")
         doc_map = {}
+    #doc count data needed for tf-idf score
+    try:
+        with open("doc_stats.json", "r", encoding="utf-8") as f:
+            stats = json.load(f)
+            total_docs = stats.get("doc_count", 1)
+    except:
+        total_docs = 1
 
     while True:
         query = input("\nEnter query: ").strip()
         terms = query.lower().split()
         terms = [stemmer.stem(t) for t in terms]
 
-        all_postings = []
+        scores = defaultdict(float)
         for term in terms:
-            postings = load_postings_for_term(term)
-            all_postings.append(set(postings))
+            postings, df = load_postings_for_term(term)
+            if df == 0:
+                continue
+            idf = log(total_docs / df)
+            for doc_id, tf in postings.items():
+                scores[doc_id] += tf * idf
 
-        if all_postings:
-            result = set.intersection(*all_postings)
-            if result:
-                print("Matching URLs:")
-                for doc_id in sorted(result):
-                    print("-", doc_map.get(str(doc_id), f"[Missing URL for {doc_id}]"))
-            else:
-                print("No documents matched all query terms.")
+        if scores:
+            print("Matching URLs (ranked):")
+            for doc_id in sorted(scores, key=scores.get, reverse=True):
+                print(f"- {doc_map.get(str(doc_id), f'[Missing URL for {doc_id}]')} (score: {scores[doc_id]:.2f})")
         else:
-            print("No matching documents.")
+            print("No documents matched all query terms.")
 
 
 # Split index by prefix (a-z and 'other'), write index_{prefix}.json files
