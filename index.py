@@ -12,6 +12,8 @@ import hashlib
 import string
 from math import log
 
+from urllib.parse import urlparse
+
 
 nltk.download('punkt')
 
@@ -166,16 +168,23 @@ def load_postings_for_term(term, index_dir="final_index"):
         return postings, df
     return {}, 0
     
+def is_valid_url(url):
+    try:
+        p = urlparse(url)
+        return all([p.scheme in ("http", "https"), p.netloc])
+    except Exception:
+        return False
 
 def search_interface():
-    # Load doc_map.json for mapping doc_ids to URLs
+    # Load doc_map.json
     try:
         with open("doc_map.json", "r", encoding="utf-8") as f:
             doc_map = json.load(f)
     except Exception as e:
         print(f"Could not load doc_map.json: {e}")
         doc_map = {}
-    #doc count data needed for tf-idf score
+
+    # Load document stats (total doc count)
     try:
         with open("doc_stats.json", "r", encoding="utf-8") as f:
             stats = json.load(f)
@@ -183,8 +192,13 @@ def search_interface():
     except:
         total_docs = 1
 
+    print("Type 'exit' or 'q' to quit.\n")
     while True:
-        query = input("\nEnter query: ").strip()
+        query = input("Search: ").strip()
+        if query.lower() in {"exit", "q"}:
+            print("Exiting search.")
+            break
+
         terms = [t for t in query.lower().split() if t not in STOPWORDS]
         terms = [stemmer.stem(t) for t in terms]
 
@@ -197,12 +211,18 @@ def search_interface():
             for doc_id, tf in postings.items():
                 scores[doc_id] += tf * idf
 
+        # print(f"\nSearch: {query}")
+
         if scores:
-            print("Matching URLs (ranked):")
-            for doc_id in sorted(scores, key=scores.get, reverse=True):
-                print(f"- {doc_map.get(str(doc_id), f'[Missing URL for {doc_id}]')} (score: {scores[doc_id]:.2f})")
+            # Sort and get up to top 5 results
+            top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
+            for i, (doc_id, score) in enumerate(top_docs, start=1):
+                url = doc_map.get(str(doc_id))
+                if url and url.startswith("http"):
+                    print(f"{i}. {url}")
         else:
             print("No documents matched all query terms.")
+
 
 
 # Split index by prefix (a-z and 'other'), write index_{prefix}.json files
@@ -226,5 +246,5 @@ def split_index_by_prefix(final_index, output_dir="final_index"):
         print(f"Wrote: {path}")
 
 if __name__ == "__main__":
-    build_index() #run once, only re-run if data changes
+    # build_index() #run once, only re-run if data changes
     search_interface()
