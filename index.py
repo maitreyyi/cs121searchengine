@@ -49,8 +49,14 @@ def tokenize(text):
     tokens = re.findall(r'\b[a-zA-Z0-9]+\b', clean_text.lower())
     return [token for token in tokens if not token.isdigit() and len(token) > 1]
 
+
 def stem_tokens(tokens):
     return [stemmer.stem(token) for token in tokens]
+
+def process_query_terms(query):
+    tokens = query.lower().split()
+    tokens = [t for t in tokens if t not in STOPWORDS]
+    return [stemmer.stem(t) for t in tokens]
 
 def stable_hash_url(url):
     return int(hashlib.md5(url.encode()).hexdigest()[:8], 16)
@@ -175,6 +181,37 @@ def is_valid_url(url):
     except Exception:
         return False
 
+def run_predefined_queries(doc_map, total_docs):
+    test_queries = [
+        "cristina lopes",
+        "machine learning",
+        "ACM",
+        "master of software engineering"
+    ]
+    print("\n🔍 Running Predefined Query Tests...\n")
+    for q in test_queries:
+        terms = process_query_terms(q)
+
+        scores = defaultdict(float)
+        for term in terms:
+            postings, df = load_postings_for_term(term)
+            if df == 0:
+                continue
+            idf = log(total_docs / df)
+            for doc_id, tf in postings.items():
+                scores[doc_id] += tf * idf
+
+        print(f"\nQuery: {q}")
+        if scores:
+            top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
+            for i, (doc_id, score) in enumerate(top_docs, start=1):
+                url = doc_map.get(str(doc_id))
+                if url and url.startswith("http"):
+                    print(f"{i}. {url}")
+        else:
+            print("No documents matched this query.")
+        print("-" * 50)
+
 def search_interface():
     # Load doc_map.json
     try:
@@ -193,16 +230,21 @@ def search_interface():
         total_docs = 1
 
     print("Type 'exit' or 'q' to quit.\n")
+    print("Type '/test' to run predefined query evaluation.\n")
+
     while True:
         query = input("Search: ").strip()
         if query.lower() in {"exit", "q"}:
             print("Exiting search.")
             break
 
-        terms = [t for t in query.lower().split() if t not in STOPWORDS]
-        terms = [stemmer.stem(t) for t in terms]
+        elif query.lower() == "/test":
+            run_predefined_queries(doc_map, total_docs)
+            continue
 
+        terms = process_query_terms(query)
         scores = defaultdict(float)
+        
         for term in terms:
             postings, df = load_postings_for_term(term)
             if df == 0:
