@@ -179,18 +179,36 @@ def run_predefined_queries(doc_map, total_docs):
         "ACM",
         "master of software engineering"
     ]
-    print("\n🔍 Running Predefined Query Tests...\n")
+    print("\nRunning Predefined Query Tests...\n")
     for q in test_queries:
         terms = process_query_terms(q)
 
-        scores = defaultdict(float)
+        candidate_docs = []
+        postings_dict = {}
+
         for term in terms:
             postings, df = load_postings_for_term(term)
             if df == 0:
                 continue
-            idf = log(total_docs / df)
-            for doc_id, posting in postings.items():
-                scores[doc_id] += posting["tf"] * idf
+            postings_dict[term] = postings
+            doc_ids = set(postings.keys())
+            candidate_docs.append(doc_ids)
+
+        if not candidate_docs:
+            print(f"\nQuery: {q}")
+            print("No documents matched this query.")
+            print("-" * 50)
+            continue
+
+        common_docs = set.intersection(*candidate_docs)
+        scores = defaultdict(float)
+        for doc_id in common_docs:
+            if phrase_in_doc(terms, doc_id, postings_dict):
+                for term in terms:
+                    posting = postings_dict[term][doc_id]
+                    df = len(postings_dict[term])
+                    idf = log(total_docs / df)
+                    scores[doc_id] += posting["tf"] * idf
 
         print(f"\nQuery: {q}")
         if scores:
@@ -234,17 +252,30 @@ def search_interface():
             continue
 
         terms = process_query_terms(query)
-        scores = defaultdict(float)
-        
+        candidate_docs = []
+        postings_dict = {}
+
         for term in terms:
             postings, df = load_postings_for_term(term)
             if df == 0:
                 continue
-            idf = log(total_docs / df)
-            for doc_id, posting in postings.items():
-                scores[doc_id] += posting["tf"] * idf
+            postings_dict[term] = postings
+            doc_ids = set(postings.keys())
+            candidate_docs.append(doc_ids)
 
-        # print(f"\nSearch: {query}")
+        if not candidate_docs:
+            print("No documents matched all query terms.")
+            continue
+
+        common_docs = set.intersection(*candidate_docs)
+        scores = defaultdict(float)
+        for doc_id in common_docs:
+            if phrase_in_doc(terms, doc_id, postings_dict):
+                for term in terms:
+                    posting = postings_dict[term][doc_id]
+                    df = len(postings_dict[term])
+                    idf = log(total_docs / df)
+                    scores[doc_id] += posting["tf"] * idf
 
         if scores:
             # Sort and get up to top 5 results
@@ -277,6 +308,18 @@ def split_index_by_prefix(final_index, output_dir="final_index"):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(index_chunk, f)
         print(f"Wrote: {path}")
+        
+# Phrase-in-document helper for phrase search
+def phrase_in_doc(terms, doc_id, index):
+    try:
+        positions_lists = [index[term][str(doc_id)]["positions"] for term in terms]
+    except KeyError:
+        return False
+
+    for start_pos in positions_lists[0]:
+        if all((start_pos + i) in positions_lists[i] for i in range(1, len(terms))):
+            return True
+    return False
 
 if __name__ == "__main__":
     # build_index() #run once, only re-run if data changes
