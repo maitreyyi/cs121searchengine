@@ -28,16 +28,6 @@ PARTIAL_FLUSH_LIMIT = 5000
 stemmer = PorterStemmer()
 
 def tokenize(text):
-    # soup = BeautifulSoup(text, "html.parser")
-    # clean_text = soup.get_text(separator=" ", strip=True)
-    # try:
-    #     soup = BeautifulSoup(text, features="xml")
-    #     clean_text = soup.get_text(separator=" ", strip=True)
-    # except Exception:
-    #     soup = BeautifulSoup(text, "html.parser")
-    #     clean_text = soup.get_text(separator=" ", strip=True)
-    # tokens = re.findall(r'\b[a-zA-Z0-9]+\b', clean_text.lower())
-    # return [token for token in tokens if not token.isdigit() and len(token) > 1]
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", XMLParsedAsHTMLWarning)
@@ -67,7 +57,7 @@ def flush_partial_index(index, flush_id):
 
     # Wrap each frequency count in {"tf": value}
     converted_index = {
-        token: {doc_id: {"tf": tf} for doc_id, tf in doc_freqs.items()}
+        token: {doc_id: {"tf": len(positions), "positions": positions} for doc_id, positions in doc_freqs.items()}
         for token, doc_freqs in index.items()
     }
 
@@ -90,9 +80,10 @@ def merge_indices(partial_dir):
                     for doc_id, posting in postings.items():
                         tf = posting.get("tf", 0)
                         if doc_id not in final_index[token]:
-                            final_index[token][doc_id] = {"tf": tf}
+                            final_index[token][doc_id] = {"tf": tf, "positions": posting.get("positions", [])}
                         else:
                             final_index[token][doc_id]["tf"] += tf
+                            final_index[token][doc_id]["positions"].extend(posting.get("positions", []))
     return final_index
 
 def write_analytics(index, doc_count):
@@ -103,7 +94,7 @@ def write_analytics(index, doc_count):
         f.write(f"Index size on disk: {index_size_kb} KB\n")
 
 def build_index():
-    temp_index = defaultdict(lambda: defaultdict(int))
+    temp_index = defaultdict(lambda: defaultdict(list))
     doc_count = 0
     flush_id = 0
     doc_map = {}
@@ -129,8 +120,8 @@ def build_index():
                     content = page.get("content", "")
                     tokens = stem_tokens(tokenize(content))
             
-                    for token in tokens:
-                        temp_index[token][doc_id] += 1
+                    for position, token in enumerate(tokens):
+                        temp_index[token][doc_id].append(position)
 
                     doc_count += 1
                     print("Doc count: ", doc_count)
@@ -169,7 +160,7 @@ def load_postings_for_term(term, index_dir="final_index"):
         index = json.load(f)
 
     if term in index:
-        postings = {doc_id: posting["tf"] for doc_id, posting in index[term].items()}
+        postings = {doc_id: {"tf": posting["tf"], "positions": posting.get("positions", [])} for doc_id, posting in index[term].items()}
         df = len(postings)
         return postings, df
     return {}, 0
@@ -198,8 +189,8 @@ def run_predefined_queries(doc_map, total_docs):
             if df == 0:
                 continue
             idf = log(total_docs / df)
-            for doc_id, tf in postings.items():
-                scores[doc_id] += tf * idf
+            for doc_id, posting in postings.items():
+                scores[doc_id] += posting["tf"] * idf
 
         print(f"\nQuery: {q}")
         if scores:
@@ -250,8 +241,8 @@ def search_interface():
             if df == 0:
                 continue
             idf = log(total_docs / df)
-            for doc_id, tf in postings.items():
-                scores[doc_id] += tf * idf
+            for doc_id, posting in postings.items():
+                scores[doc_id] += posting["tf"] * idf
 
         # print(f"\nSearch: {query}")
 
