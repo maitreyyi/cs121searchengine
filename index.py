@@ -47,7 +47,7 @@ def tokenize(text):
         soup = BeautifulSoup(text, "html.parser")
         clean_text = soup.get_text(separator=" ", strip=True)
     tokens = re.findall(r'\b[a-zA-Z0-9]+\b', clean_text.lower())
-    return [token for token in tokens if not token.isdigit() and len(token) > 1]
+    return [token for token in tokens if not token.isdigit() and len(token) > 1 and token not in STOPWORDS]
 
 
 def stem_tokens(tokens):
@@ -199,7 +199,7 @@ def run_predefined_queries(doc_map, total_docs):
     except Exception:
         idf_values = {}
     for q in test_queries:
-        terms = process_query_terms(q, remove_stopwords=False)
+        terms = process_query_terms(q, remove_stopwords=True)
 
         candidate_docs = []
         postings_dict = {}
@@ -269,7 +269,7 @@ def search_interface():
             run_predefined_queries(doc_map, total_docs)
             continue
 
-        terms = process_query_terms(query, remove_stopwords=False)
+        terms = process_query_terms(query, remove_stopwords=True)
         candidate_docs = []
         postings_dict = {}
 
@@ -345,5 +345,5 @@ def phrase_in_doc(terms, doc_id, index, window_size=4):
     return False
 
 if __name__ == "__main__":
-    # build_index() #run once, only re-run if data changes
+    build_index() #run once, only re-run if data changes
     search_interface()
