@@ -27,6 +27,8 @@ PARTIAL_FLUSH_LIMIT = 5000
 
 stemmer = PorterStemmer()
 
+index_cache = {}
+
 def tokenize(text):
     try:
         with warnings.catch_warnings():
@@ -43,9 +45,10 @@ def tokenize(text):
 def stem_tokens(tokens):
     return [stemmer.stem(token) for token in tokens]
 
-def process_query_terms(query):
+def process_query_terms(query, remove_stopwords=True):
     tokens = query.lower().split()
-    tokens = [t for t in tokens if t not in STOPWORDS]
+    if remove_stopwords:
+        tokens = [t for t in tokens if t not in STOPWORDS]
     return [stemmer.stem(t) for t in tokens]
 
 def stable_hash_url(url):
@@ -55,9 +58,9 @@ def flush_partial_index(index, flush_id):
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
     filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.json")
 
-    # Wrap each frequency count in {"tf": value}
+    # Wrap each posting in {"positions": positions}
     converted_index = {
-        token: {doc_id: {"tf": len(positions), "positions": positions} for doc_id, positions in doc_freqs.items()}
+        token: {doc_id: {"positions": positions} for doc_id, positions in doc_freqs.items()}
         for token, doc_freqs in index.items()
     }
 
@@ -78,11 +81,9 @@ def merge_indices(partial_dir):
                 partial = json.load(f)
                 for token, postings in partial.items():
                     for doc_id, posting in postings.items():
-                        tf = posting.get("tf", 0)
                         if doc_id not in final_index[token]:
-                            final_index[token][doc_id] = {"tf": tf, "positions": posting.get("positions", [])}
+                            final_index[token][doc_id] = {"positions": posting.get("positions", [])}
                         else:
-                            final_index[token][doc_id]["tf"] += tf
                             final_index[token][doc_id]["positions"].extend(posting.get("positions", []))
     return final_index
 
@@ -145,6 +146,14 @@ def build_index():
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
+
+    # Calculate and store IDF values
+    idf_values = {
+        token: log(doc_count / len(postings)) for token, postings in final_index.items()
+    }
+    with open("idf.json", "w", encoding="utf-8") as f:
+        json.dump(idf_values, f)
+
     split_index_by_prefix(final_index)
     write_analytics(final_index, doc_count)
     print(f"Indexing complete. Total documents: {doc_count}")
@@ -156,11 +165,15 @@ def load_postings_for_term(term, index_dir="final_index"):
     if not os.path.exists(filepath):
         return {}, 0
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        index = json.load(f)
+    if filepath in index_cache:
+        index = index_cache[filepath]
+    else:
+        with open(filepath, "r", encoding="utf-8") as f:
+            index = json.load(f)
+            index_cache[filepath] = index
 
     if term in index:
-        postings = {doc_id: {"tf": posting["tf"], "positions": posting.get("positions", [])} for doc_id, posting in index[term].items()}
+        postings = {doc_id: {"positions": posting.get("positions", [])} for doc_id, posting in index[term].items()}
         df = len(postings)
         return postings, df
     return {}, 0
@@ -180,8 +193,14 @@ def run_predefined_queries(doc_map, total_docs):
         "master of software engineering"
     ]
     print("\nRunning Predefined Query Tests...\n")
+    # Load IDF values
+    try:
+        with open("idf.json", "r", encoding="utf-8") as f:
+            idf_values = json.load(f)
+    except Exception:
+        idf_values = {}
     for q in test_queries:
-        terms = process_query_terms(q)
+        terms = process_query_terms(q, remove_stopwords=False)
 
         candidate_docs = []
         postings_dict = {}
@@ -206,9 +225,7 @@ def run_predefined_queries(doc_map, total_docs):
             if phrase_in_doc(terms, doc_id, postings_dict):
                 for term in terms:
                     posting = postings_dict[term][doc_id]
-                    df = len(postings_dict[term])
-                    idf = log(total_docs / df)
-                    scores[doc_id] += posting["tf"] * idf
+                    scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
 
         print(f"\nQuery: {q}")
         if scores:
@@ -241,6 +258,13 @@ def search_interface():
     print("Type 'exit' or 'q' to quit.\n")
     print("Type '/test' to run predefined query evaluation.\n")
 
+    # Load IDF values once
+    try:
+        with open("idf.json", "r", encoding="utf-8") as f:
+            idf_values = json.load(f)
+    except Exception:
+        idf_values = {}
+
     while True:
         query = input("Search: ").strip()
         if query.lower() in {"exit", "q"}:
@@ -251,7 +275,7 @@ def search_interface():
             run_predefined_queries(doc_map, total_docs)
             continue
 
-        terms = process_query_terms(query)
+        terms = process_query_terms(query, remove_stopwords=False)
         candidate_docs = []
         postings_dict = {}
 
@@ -273,9 +297,7 @@ def search_interface():
             if phrase_in_doc(terms, doc_id, postings_dict):
                 for term in terms:
                     posting = postings_dict[term][doc_id]
-                    df = len(postings_dict[term])
-                    idf = log(total_docs / df)
-                    scores[doc_id] += posting["tf"] * idf
+                    scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
 
         if scores:
             # Sort and get up to top 5 results
@@ -308,16 +330,25 @@ def split_index_by_prefix(final_index, output_dir="final_index"):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(index_chunk, f)
         print(f"Wrote: {path}")
-        
+
 # Phrase-in-document helper for phrase search
 def phrase_in_doc(terms, doc_id, index):
     try:
-        positions_lists = [index[term][str(doc_id)]["positions"] for term in terms]
+        positions_lists = [sorted(index[term][str(doc_id)]["positions"]) for term in terms]
     except KeyError:
         return False
 
-    for start_pos in positions_lists[0]:
-        if all((start_pos + i) in positions_lists[i] for i in range(1, len(terms))):
+    # Start with the positions of the first term
+    first_positions = positions_lists[0]
+    for pos in first_positions:
+        match = True
+        for i in range(1, len(terms)):
+            # Advance pointer to find position[i] == pos + i
+            expected = pos + i
+            if expected not in positions_lists[i]:
+                match = False
+                break
+        if match:
             return True
     return False
 
