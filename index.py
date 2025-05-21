@@ -276,7 +276,9 @@ def search_interface():
         for term in terms:
             postings, df = load_postings_for_term(term)
             if df == 0:
-                continue
+                print(f"Missing term: {term} in index --- abort")
+                candidate_docs = []
+                break
             postings_dict[term] = postings
             doc_ids = set(postings.keys())
             candidate_docs.append(doc_ids)
