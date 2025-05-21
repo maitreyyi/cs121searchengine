@@ -15,19 +15,27 @@ from math import log
 from urllib.parse import urlparse
 
 
+FINAL_INDEX = "index.json"
+ANALYTICS_FILE = "analytics.txt"
 nltk.download('punkt')
 
 STOPWORDS = {"a", "an", "the", "of", "on", "in", "for", "and", "to", "with"}
 
 DATA_DIR = "data"
 PARTIAL_INDEX_DIR = "partial_indices"
-FINAL_INDEX = "index.json"
-ANALYTICS_FILE = "analytics.txt"
 PARTIAL_FLUSH_LIMIT = 5000
+DOC_COUNT = 55393
 
 stemmer = PorterStemmer()
 
 index_cache = {}
+
+def write_analytics(index, doc_count):
+    index_size_kb = sum(os.path.getsize(os.path.join("final_index", f)) for f in os.listdir("final_index") if f.endswith(".json")) // 1024
+    with open(ANALYTICS_FILE, 'w') as f:
+        f.write(f"Documents indexed: {doc_count}\n")
+        f.write(f"Unique tokens: {len(index)}\n")
+        f.write(f"Index size on disk: {index_size_kb} KB\n")
 
 def tokenize(text):
     try:
@@ -87,12 +95,6 @@ def merge_indices(partial_dir):
                             final_index[token][doc_id]["positions"].extend(posting.get("positions", []))
     return final_index
 
-def write_analytics(index, doc_count):
-    index_size_kb = os.path.getsize(FINAL_INDEX) // 1024
-    with open(ANALYTICS_FILE, 'w') as f:
-        f.write(f"Documents indexed: {doc_count}\n")
-        f.write(f"Unique tokens: {len(index)}\n")
-        f.write(f"Index size on disk: {index_size_kb} KB\n")
 
 def build_index():
     temp_index = defaultdict(lambda: defaultdict(list))
@@ -140,9 +142,6 @@ def build_index():
 
     with open("doc_map.json", "w", encoding="utf-8") as f:
         json.dump(doc_map, f)
-
-    with open("doc_stats.json", "w", encoding="utf-8") as f:
-        json.dump({"doc_count": doc_count}, f)
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
@@ -222,7 +221,7 @@ def run_predefined_queries(doc_map, total_docs):
         common_docs = set.intersection(*candidate_docs)
         scores = defaultdict(float)
         for doc_id in common_docs:
-            if phrase_in_doc(terms, doc_id, postings_dict):
+            if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
                 for term in terms:
                     posting = postings_dict[term][doc_id]
                     scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
@@ -247,13 +246,8 @@ def search_interface():
         print(f"Could not load doc_map.json: {e}")
         doc_map = {}
 
-    # Load document stats (total doc count)
-    try:
-        with open("doc_stats.json", "r", encoding="utf-8") as f:
-            stats = json.load(f)
-            total_docs = stats.get("doc_count", 1)
-    except:
-        total_docs = 1
+    # Use constant for total document count
+    total_docs = DOC_COUNT
 
     print("Type 'exit' or 'q' to quit.\n")
     print("Type '/test' to run predefined query evaluation.\n")
@@ -294,7 +288,7 @@ def search_interface():
         common_docs = set.intersection(*candidate_docs)
         scores = defaultdict(float)
         for doc_id in common_docs:
-            if phrase_in_doc(terms, doc_id, postings_dict):
+            if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
                 for term in terms:
                     posting = postings_dict[term][doc_id]
                     scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
@@ -331,24 +325,20 @@ def split_index_by_prefix(final_index, output_dir="final_index"):
             json.dump(index_chunk, f)
         print(f"Wrote: {path}")
 
-# Phrase-in-document helper for phrase search
-def phrase_in_doc(terms, doc_id, index):
+# Phrase-in-document helper for phrase search (proximity-based)
+def phrase_in_doc(terms, doc_id, index, window_size=4):
     try:
-        positions_lists = [sorted(index[term][str(doc_id)]["positions"]) for term in terms]
+        positions_lists = [index[term][str(doc_id)]["positions"] for term in terms]
     except KeyError:
         return False
 
-    # Start with the positions of the first term
-    first_positions = positions_lists[0]
-    for pos in first_positions:
-        match = True
-        for i in range(1, len(terms)):
-            # Advance pointer to find position[i] == pos + i
-            expected = pos + i
-            if expected not in positions_lists[i]:
-                match = False
-                break
-        if match:
+    # Flatten and sort all positions
+    all_positions = sorted(pos for plist in positions_lists for pos in plist)
+
+    # Check for any window of size len(terms) where max - min <= window_size
+    for i in range(len(all_positions) - len(terms) + 1):
+        window = all_positions[i + len(terms) - 1] - all_positions[i]
+        if window <= window_size:
             return True
     return False
 
