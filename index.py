@@ -62,6 +62,16 @@ def process_query_terms(query, remove_stopwords=True):
 def stable_hash_url(url):
     return int(hashlib.md5(url.encode()).hexdigest()[:8], 16)
 
+def normalize_url(url):
+    try:
+        parsed = urlparse(url)
+        normalized = parsed._replace(fragment="", query="").geturl()
+        if normalized.endswith("/") and len(normalized) > len(parsed.scheme) + 3 + len(parsed.netloc):
+            normalized = normalized.rstrip("/")
+        return normalized
+    except Exception:
+        return url
+
 def flush_partial_index(index, flush_id):
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
     filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.json")
@@ -115,8 +125,16 @@ def build_index():
                     page = json.load(f)
                     
                     try:
-                        doc_id = stable_hash_url(page.get("url"))
-                        doc_map[doc_id] = page.get("url")
+                        original_url = page.get("url")
+                        if not original_url or not is_valid_url(original_url):
+                            continue
+                        norm_url = normalize_url(original_url)
+                        doc_id = stable_hash_url(norm_url)
+
+                        if doc_id in doc_map:
+                            continue
+
+                        doc_map[doc_id] = norm_url
                     except ValueError:
                         continue  # or log and skip problematic URLs
 
@@ -219,12 +237,29 @@ def run_predefined_queries(doc_map, total_docs):
             continue
 
         common_docs = set.intersection(*candidate_docs)
+
+        phrase_docs = []
+        for doc_id in set.intersection(*candidate_docs):
+            if full_phrase_in_doc(terms, doc_id, postings_dict):
+                phrase_docs.append(doc_id)
+
+
         scores = defaultdict(float)
-        for doc_id in common_docs:
-            if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
+        if phrase_docs:
+            for doc_id in phrase_docs:
+                scores[doc_id] += 1000  # Strong phrase boost
                 for term in terms:
-                    posting = postings_dict[term][doc_id]
-                    scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+                    if doc_id in postings_dict[term]:
+                        posting = postings_dict[term][doc_id]
+                        scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+        else:
+            # fallback to AND-match with proximity
+            for doc_id in set.intersection(*candidate_docs):
+                if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
+                    for term in terms:
+                        if doc_id in postings_dict[term]:
+                            posting = postings_dict[term][doc_id]
+                            scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
 
         print(f"\nQuery: {q}")
         if scores:
@@ -288,12 +323,29 @@ def search_interface():
             continue
 
         common_docs = set.intersection(*candidate_docs)
+        # Step 1: Phrase Match Filtering (strict first)
+        phrase_docs = []
+        for doc_id in set.intersection(*candidate_docs):
+            if full_phrase_in_doc(terms, doc_id, postings_dict):
+                phrase_docs.append(doc_id)
+
+        # Step 2: Scoring
         scores = defaultdict(float)
-        for doc_id in common_docs:
-            if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
+        if phrase_docs:
+            for doc_id in phrase_docs:
+                scores[doc_id] += 1000  # Strong phrase boost
                 for term in terms:
-                    posting = postings_dict[term][doc_id]
-                    scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+                    if doc_id in postings_dict[term]:
+                        posting = postings_dict[term][doc_id]
+                        scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+        else:
+            # fallback to AND-match with proximity
+            for doc_id in set.intersection(*candidate_docs):
+                if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
+                    for term in terms:
+                        if doc_id in postings_dict[term]:
+                            posting = postings_dict[term][doc_id]
+                            scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
 
         if scores:
             # Sort and get up to top 5 results
@@ -344,6 +396,26 @@ def phrase_in_doc(terms, doc_id, index, window_size=4):
             return True
     return False
 
+def full_phrase_in_doc(terms, doc_id, postings_dict):
+    try:
+        doc_id = str(doc_id)
+        positions_lists = [postings_dict[term][doc_id]["positions"] for term in terms]
+    except KeyError:
+        return False
+
+    first_positions = positions_lists[0]
+    for pos in first_positions:
+        match = True
+        for i in range(1, len(terms)):
+            expected_pos = pos + i
+            if expected_pos not in positions_lists[i]:
+                match = False
+                break
+        if match:
+            return True
+    return False
+
+
 if __name__ == "__main__":
-    build_index() #run once, only re-run if data changes
+    # build_index() #run once, only re-run if data changes
     search_interface()
