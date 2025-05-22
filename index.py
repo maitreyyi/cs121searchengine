@@ -111,6 +111,7 @@ def build_index():
     doc_count = 0
     flush_id = 0
     doc_map = {}
+    title_headline_tokens = {}
     
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
@@ -150,6 +151,16 @@ def build_index():
                     clean_text = main_content.get_text(separator=" ", strip=True) if main_content else ""
 
                     tokens = stem_tokens(tokenize(clean_text))
+
+                    # Extract title and headings tokens
+                    title_tag = soup.title.string if soup.title else ""
+                    headings = " ".join(h.get_text(separator=" ", strip=True) for h in soup.find_all(["h1", "h2", "h3"]))
+                    extra_text = f"{title_tag} {headings}"
+                    extra_tokens = stem_tokens(tokenize(extra_text))
+                    extra_token_counts = defaultdict(int)
+                    for token in extra_tokens:
+                        extra_token_counts[token] += 1
+                    title_headline_tokens[doc_id] = dict(extra_token_counts)
             
                     for position, token in enumerate(tokens):
                         temp_index[token][doc_id].append(position)
@@ -170,6 +181,9 @@ def build_index():
 
     with open("doc_map.json", "w", encoding="utf-8") as f:
         json.dump(doc_map, f)
+    # Dump title_headline_tokens to file
+    with open("title_headline.json", "w", encoding="utf-8") as f:
+        json.dump(title_headline_tokens, f)
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
@@ -226,6 +240,12 @@ def run_predefined_queries(doc_map, total_docs):
             idf_values = json.load(f)
     except Exception:
         idf_values = {}
+    # Load title_headline.json
+    try:
+        with open("title_headline.json", "r", encoding="utf-8") as f:
+            headline_tokens = json.load(f)
+    except Exception:
+        headline_tokens = {}
     for q in test_queries:
         terms = process_query_terms(q, remove_stopwords=True)
 
@@ -268,6 +288,11 @@ def run_predefined_queries(doc_map, total_docs):
                         freq = len(postings_dict[term][doc_id]["positions"])
                         tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                         scores[doc_id] += tfidf
+                # Headline/title scoring
+                tokens_in_headline = headline_tokens.get(str(doc_id), {})
+                for term in terms:
+                    if term in tokens_in_headline:
+                        scores[doc_id] += 50
                 url = doc_map.get(str(doc_id), "")
                 if any(term in url.lower() for term in terms):
                     scores[doc_id] += 10
@@ -286,6 +311,11 @@ def run_predefined_queries(doc_map, total_docs):
                             freq = len(postings_dict[term][doc_id]["positions"])
                             tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                             scores[doc_id] += tfidf
+                    # Headline/title scoring
+                    tokens_in_headline = headline_tokens.get(str(doc_id), {})
+                    for term in terms:
+                        if term in tokens_in_headline:
+                            scores[doc_id] += 50
                     url = doc_map.get(str(doc_id), "")
                     if any(term in url.lower() for term in terms):
                         scores[doc_id] += 10
@@ -323,6 +353,12 @@ def search_interface():
             idf_values = json.load(f)
     except Exception:
         idf_values = {}
+    # Load title_headline.json
+    try:
+        with open("title_headline.json", "r", encoding="utf-8") as f:
+            headline_tokens = json.load(f)
+    except Exception:
+        headline_tokens = {}
 
     while True:
         query = input("Search: ").strip()
@@ -374,6 +410,11 @@ def search_interface():
                         freq = len(postings_dict[term][doc_id]["positions"])
                         tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                         scores[doc_id] += tfidf
+                # Headline/title scoring
+                tokens_in_headline = headline_tokens.get(str(doc_id), {})
+                for term in terms:
+                    if term in tokens_in_headline:
+                        scores[doc_id] += 50
                 url = doc_map.get(str(doc_id), "")
                 if any(term in url.lower() for term in terms):
                     scores[doc_id] += 10
@@ -392,6 +433,11 @@ def search_interface():
                             freq = len(postings_dict[term][doc_id]["positions"])
                             tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                             scores[doc_id] += tfidf
+                    # Headline/title scoring
+                    tokens_in_headline = headline_tokens.get(str(doc_id), {})
+                    for term in terms:
+                        if term in tokens_in_headline:
+                            scores[doc_id] += 50
                     url = doc_map.get(str(doc_id), "")
                     if any(term in url.lower() for term in terms):
                         scores[doc_id] += 10
