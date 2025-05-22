@@ -258,18 +258,38 @@ def run_predefined_queries(doc_map, total_docs):
         if phrase_docs:
             for doc_id in phrase_docs:
                 scores[doc_id] += 1000  # Strong phrase boost
+                # New TF-IDF scoring logic
+                doc_len = sum(
+                    len(postings_dict[t][doc_id]["positions"])
+                    for t in terms if doc_id in postings_dict[t]
+                )
                 for term in terms:
                     if doc_id in postings_dict[term]:
-                        posting = postings_dict[term][doc_id]
-                        scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+                        freq = len(postings_dict[term][doc_id]["positions"])
+                        tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
+                        scores[doc_id] += tfidf
+                url = doc_map.get(str(doc_id), "")
+                if any(term in url.lower() for term in terms):
+                    scores[doc_id] += 10
+                scores[doc_id] -= url.count('/')
         else:
             # fallback to AND-match with proximity
             for doc_id in set.intersection(*candidate_docs):
                 if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
+                    # New TF-IDF scoring logic
+                    doc_len = sum(
+                        len(postings_dict[t][doc_id]["positions"])
+                        for t in terms if doc_id in postings_dict[t]
+                    )
                     for term in terms:
                         if doc_id in postings_dict[term]:
-                            posting = postings_dict[term][doc_id]
-                            scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+                            freq = len(postings_dict[term][doc_id]["positions"])
+                            tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
+                            scores[doc_id] += tfidf
+                    url = doc_map.get(str(doc_id), "")
+                    if any(term in url.lower() for term in terms):
+                        scores[doc_id] += 10
+                    scores[doc_id] -= url.count('/')
 
         print(f"\nQuery: {q}")
         if scores:
@@ -344,18 +364,38 @@ def search_interface():
         if phrase_docs:
             for doc_id in phrase_docs:
                 scores[doc_id] += 1000  # Strong phrase boost
+                # New TF-IDF scoring logic
+                doc_len = sum(
+                    len(postings_dict[t][doc_id]["positions"])
+                    for t in terms if doc_id in postings_dict[t]
+                )
                 for term in terms:
                     if doc_id in postings_dict[term]:
-                        posting = postings_dict[term][doc_id]
-                        scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+                        freq = len(postings_dict[term][doc_id]["positions"])
+                        tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
+                        scores[doc_id] += tfidf
+                url = doc_map.get(str(doc_id), "")
+                if any(term in url.lower() for term in terms):
+                    scores[doc_id] += 10
+                scores[doc_id] -= url.count('/')
         else:
             # fallback to AND-match with proximity
             for doc_id in set.intersection(*candidate_docs):
                 if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
+                    # New TF-IDF scoring logic
+                    doc_len = sum(
+                        len(postings_dict[t][doc_id]["positions"])
+                        for t in terms if doc_id in postings_dict[t]
+                    )
                     for term in terms:
                         if doc_id in postings_dict[term]:
-                            posting = postings_dict[term][doc_id]
-                            scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+                            freq = len(postings_dict[term][doc_id]["positions"])
+                            tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
+                            scores[doc_id] += tfidf
+                    url = doc_map.get(str(doc_id), "")
+                    if any(term in url.lower() for term in terms):
+                        scores[doc_id] += 10
+                    scores[doc_id] -= url.count('/')
 
         if scores:
             # Sort and get up to top 5 results
