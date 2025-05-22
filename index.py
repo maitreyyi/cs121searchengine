@@ -111,6 +111,7 @@ def build_index():
     doc_count = 0
     flush_id = 0
     doc_map = {}
+    doc_bodies = {}  # NEW: Store document bodies
     
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
@@ -139,6 +140,9 @@ def build_index():
                         continue  # or log and skip problematic URLs
 
                     content = page.get("content", "")
+                    soup = BeautifulSoup(content, "html.parser")
+                    clean_text = soup.get_text(separator=" ", strip=True)
+                    doc_bodies[doc_id] = clean_text.lower()  # NEW: Store document body
                     tokens = stem_tokens(tokenize(content))
             
                     for position, token in enumerate(tokens):
@@ -160,6 +164,9 @@ def build_index():
 
     with open("doc_map.json", "w", encoding="utf-8") as f:
         json.dump(doc_map, f)
+
+    with open("doc_bodies.json", "w", encoding="utf-8") as f:  # NEW: Save document bodies
+        json.dump(doc_bodies, f)
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
@@ -202,7 +209,10 @@ def is_valid_url(url):
     except Exception:
         return False
 
-def run_predefined_queries(doc_map, total_docs):
+def raw_phrase_in_doc(raw_query, doc_id, doc_bodies):  # NEW: Raw phrase matching function
+    return raw_query.lower() in doc_bodies.get(str(doc_id), "").lower()
+
+def run_predefined_queries(doc_map, total_docs, require_exact_phrase=True):
     test_queries = [
         "cristina lopes",
         "machine learning",
@@ -210,25 +220,31 @@ def run_predefined_queries(doc_map, total_docs):
         "master of software engineering"
     ]
     print("\nRunning Predefined Query Tests...\n")
-    # Load IDF values
+
+    try:
+        with open("doc_bodies.json", "r", encoding="utf-8") as f:
+            doc_bodies = json.load(f)
+    except Exception:
+        doc_bodies = {}
+
     try:
         with open("idf.json", "r", encoding="utf-8") as f:
             idf_values = json.load(f)
     except Exception:
         idf_values = {}
+
     for q in test_queries:
         terms = process_query_terms(q, remove_stopwords=True)
 
-        candidate_docs = []
         postings_dict = {}
+        candidate_docs = []
 
         for term in terms:
             postings, df = load_postings_for_term(term)
             if df == 0:
                 continue
             postings_dict[term] = postings
-            doc_ids = set(postings.keys())
-            candidate_docs.append(doc_ids)
+            candidate_docs.append(set(postings.keys()))
 
         if not candidate_docs:
             print(f"\nQuery: {q}")
@@ -237,29 +253,24 @@ def run_predefined_queries(doc_map, total_docs):
             continue
 
         common_docs = set.intersection(*candidate_docs)
+        phrase_docs = [doc_id for doc_id in common_docs if raw_phrase_in_doc(q, doc_id, doc_bodies)]
 
-        phrase_docs = []
-        for doc_id in set.intersection(*candidate_docs):
-            if full_phrase_in_doc(terms, doc_id, postings_dict):
-                phrase_docs.append(doc_id)
+        if require_exact_phrase:
+            if not phrase_docs:
+                print(f"\nQuery: {q}")
+                print("No documents contained the full phrase.")
+                print("-" * 50)
+                continue
 
-
+        # Strictly score only phrase_docs
         scores = defaultdict(float)
-        if phrase_docs:
-            for doc_id in phrase_docs:
-                scores[doc_id] += 1000  # Strong phrase boost
-                for term in terms:
-                    if doc_id in postings_dict[term]:
-                        posting = postings_dict[term][doc_id]
-                        scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
-        else:
-            # fallback to AND-match with proximity
-            for doc_id in set.intersection(*candidate_docs):
-                if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
-                    for term in terms:
-                        if doc_id in postings_dict[term]:
-                            posting = postings_dict[term][doc_id]
-                            scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+        for doc_id in phrase_docs:
+            scores[doc_id] += 1000  # Phrase bonus
+            for term in terms:
+                if str(doc_id) in postings_dict[term]:
+                    tf = len(postings_dict[term][str(doc_id)]["positions"])
+                    idf = idf_values.get(term, 0)
+                    scores[doc_id] += tf * idf
 
         print(f"\nQuery: {q}")
         if scores:
@@ -269,11 +280,10 @@ def run_predefined_queries(doc_map, total_docs):
                 if url and url.startswith("http"):
                     print(f"{i}. {url}")
         else:
-            print("No documents matched this query.")
+            print("No documents matched the full phrase.")
         print("-" * 50)
 
 def search_interface():
-    # Load doc_map.json
     try:
         with open("doc_map.json", "r", encoding="utf-8") as f:
             doc_map = json.load(f)
@@ -281,27 +291,31 @@ def search_interface():
         print(f"Could not load doc_map.json: {e}")
         doc_map = {}
 
-    # Use constant for total document count
-    total_docs = DOC_COUNT
-
-    print("Type 'exit' or 'q' to quit.\n")
-    print("Type '/test' to run predefined query evaluation.\n")
-
-    # Load IDF values once
     try:
         with open("idf.json", "r", encoding="utf-8") as f:
             idf_values = json.load(f)
     except Exception:
         idf_values = {}
 
+    try:
+        with open("doc_bodies.json", "r", encoding="utf-8") as f:  # NEW: Load document bodies
+            doc_bodies = json.load(f)
+    except Exception as e:
+        print(f"Could not load doc_bodies.json: {e}")
+        doc_bodies = {}
+
+    total_docs = DOC_COUNT
+
+    print("Type 'exit' or 'q' to quit.\n")
+    print("Type '/test' to run predefined query evaluation.\n")
+
     while True:
         query = input("Search: ").strip()
         if query.lower() in {"exit", "q"}:
             print("Exiting search.")
             break
-
         elif query.lower() == "/test":
-            run_predefined_queries(doc_map, total_docs)
+            run_predefined_queries(doc_map, total_docs, require_exact_phrase=True)
             continue
 
         terms = process_query_terms(query, remove_stopwords=True)
@@ -315,47 +329,38 @@ def search_interface():
                 candidate_docs = []
                 break
             postings_dict[term] = postings
-            doc_ids = set(postings.keys())
-            candidate_docs.append(doc_ids)
+            candidate_docs.append(set(postings.keys()))
 
         if not candidate_docs:
             print("No documents matched all query terms.")
             continue
 
         common_docs = set.intersection(*candidate_docs)
-        # Step 1: Phrase Match Filtering (strict first)
-        phrase_docs = []
-        for doc_id in set.intersection(*candidate_docs):
-            if full_phrase_in_doc(terms, doc_id, postings_dict):
-                phrase_docs.append(doc_id)
 
-        # Step 2: Scoring
+        # NEW: Use raw phrase matching
+        phrase_docs = [doc_id for doc_id in common_docs if raw_phrase_in_doc(query, doc_id, doc_bodies)]
+
+        if not phrase_docs:
+            print("No documents contained the full phrase.")
+            continue
+
         scores = defaultdict(float)
-        if phrase_docs:
-            for doc_id in phrase_docs:
-                scores[doc_id] += 1000  # Strong phrase boost
-                for term in terms:
-                    if doc_id in postings_dict[term]:
-                        posting = postings_dict[term][doc_id]
-                        scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
-        else:
-            # fallback to AND-match with proximity
-            for doc_id in set.intersection(*candidate_docs):
-                if phrase_in_doc(terms, doc_id, postings_dict, window_size=4):
-                    for term in terms:
-                        if doc_id in postings_dict[term]:
-                            posting = postings_dict[term][doc_id]
-                            scores[doc_id] += len(posting["positions"]) * idf_values.get(term, 0)
+        for doc_id in phrase_docs:
+            scores[doc_id] += 1000  # Phrase bonus
+            for term in terms:
+                if str(doc_id) in postings_dict[term]:
+                    tf = len(postings_dict[term][str(doc_id)]["positions"])
+                    idf = idf_values.get(term, 0)
+                    scores[doc_id] += tf * idf
 
         if scores:
-            # Sort and get up to top 5 results
             top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
             for i, (doc_id, score) in enumerate(top_docs, start=1):
                 url = doc_map.get(str(doc_id))
                 if url and url.startswith("http"):
                     print(f"{i}. {url}")
         else:
-            print("No documents matched all query terms.")
+            print("No documents matched the full phrase.")
 
 
 
