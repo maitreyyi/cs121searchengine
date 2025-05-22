@@ -139,7 +139,17 @@ def build_index():
                         continue  # or log and skip problematic URLs
 
                     content = page.get("content", "")
-                    tokens = stem_tokens(tokenize(content))
+                    soup = BeautifulSoup(content, "html.parser")
+
+                    # Remove non-content elements
+                    for tag in soup(["header", "footer", "nav", "aside", "script", "style"]):
+                        tag.decompose()
+
+                    # Prefer main content if available
+                    main_content = soup.find("main") or soup.find("div", {"id": "main"}) or soup.body
+                    clean_text = main_content.get_text(separator=" ", strip=True) if main_content else ""
+
+                    tokens = stem_tokens(tokenize(clean_text))
             
                     for position, token in enumerate(tokens):
                         temp_index[token][doc_id].append(position)
