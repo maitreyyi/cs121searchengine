@@ -111,7 +111,7 @@ def build_index():
     doc_count = 0
     flush_id = 0
     doc_map = {}
-    title_headline_tokens = {}
+    title_map = {}
     
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
@@ -150,18 +150,12 @@ def build_index():
                     main_content = soup.find("main") or soup.find("div", {"id": "main"}) or soup.body
                     clean_text = main_content.get_text(separator=" ", strip=True) if main_content else ""
 
+                    # Extract title
+                    title_text = soup.title.string.strip() if soup.title and soup.title.string else ""
+                    title_map[doc_id] = title_text
+
                     tokens = stem_tokens(tokenize(clean_text))
 
-                    # Extract title and headings tokens
-                    title_tag = soup.title.string if soup.title else ""
-                    headings = " ".join(h.get_text(separator=" ", strip=True) for h in soup.find_all(["h1", "h2", "h3"]))
-                    extra_text = f"{title_tag} {headings}"
-                    extra_tokens = stem_tokens(tokenize(extra_text))
-                    extra_token_counts = defaultdict(int)
-                    for token in extra_tokens:
-                        extra_token_counts[token] += 1
-                    title_headline_tokens[doc_id] = dict(extra_token_counts)
-            
                     for position, token in enumerate(tokens):
                         temp_index[token][doc_id].append(position)
 
@@ -181,9 +175,9 @@ def build_index():
 
     with open("doc_map.json", "w", encoding="utf-8") as f:
         json.dump(doc_map, f)
-    # Dump title_headline_tokens to file
-    with open("title_headline.json", "w", encoding="utf-8") as f:
-        json.dump(title_headline_tokens, f)
+    # Dump title_map to file
+    with open("title_map.json", "w", encoding="utf-8") as f:
+        json.dump(title_map, f)
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
@@ -240,12 +234,12 @@ def run_predefined_queries(doc_map, total_docs):
             idf_values = json.load(f)
     except Exception:
         idf_values = {}
-    # Load title_headline.json
+    # Load title_map
     try:
-        with open("title_headline.json", "r", encoding="utf-8") as f:
-            headline_tokens = json.load(f)
+        with open("title_map.json", "r", encoding="utf-8") as f:
+            title_map = json.load(f)
     except Exception:
-        headline_tokens = {}
+        title_map = {}
     for q in test_queries:
         terms = process_query_terms(q, remove_stopwords=True)
 
@@ -275,6 +269,7 @@ def run_predefined_queries(doc_map, total_docs):
 
 
         scores = defaultdict(float)
+        import re
         if phrase_docs:
             for doc_id in phrase_docs:
                 scores[doc_id] += 1000  # Strong phrase boost
@@ -288,14 +283,18 @@ def run_predefined_queries(doc_map, total_docs):
                         freq = len(postings_dict[term][doc_id]["positions"])
                         tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                         scores[doc_id] += tfidf
-                # Headline/title scoring
-                tokens_in_headline = headline_tokens.get(str(doc_id), {})
-                for term in terms:
-                    if term in tokens_in_headline:
-                        scores[doc_id] += 50
                 url = doc_map.get(str(doc_id), "")
-                if any(term in url.lower() for term in terms):
-                    scores[doc_id] += 10
+                url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                for term in terms:
+                    if term in url_tokens:
+                        scores[doc_id] += 15  # Stronger boost for term match in URL
+                    if term in url:
+                        scores[doc_id] += 10
+                # Title boosting
+                title = title_map.get(str(doc_id), "").lower()
+                for term in terms:
+                    if term in title:
+                        scores[doc_id] += 20
                 scores[doc_id] -= url.count('/')
         else:
             # fallback to AND-match with proximity
@@ -311,14 +310,18 @@ def run_predefined_queries(doc_map, total_docs):
                             freq = len(postings_dict[term][doc_id]["positions"])
                             tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                             scores[doc_id] += tfidf
-                    # Headline/title scoring
-                    tokens_in_headline = headline_tokens.get(str(doc_id), {})
-                    for term in terms:
-                        if term in tokens_in_headline:
-                            scores[doc_id] += 50
                     url = doc_map.get(str(doc_id), "")
-                    if any(term in url.lower() for term in terms):
-                        scores[doc_id] += 10
+                    url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                    for term in terms:
+                        if term in url_tokens:
+                            scores[doc_id] += 15  # Stronger boost for term match in URL
+                        if term in url:
+                            scores[doc_id] += 10
+                    # Title boosting
+                    title = title_map.get(str(doc_id), "").lower()
+                    for term in terms:
+                        if term in title:
+                            scores[doc_id] += 20
                     scores[doc_id] -= url.count('/')
 
         print(f"\nQuery: {q}")
@@ -341,6 +344,13 @@ def search_interface():
         print(f"Could not load doc_map.json: {e}")
         doc_map = {}
 
+    # Load title_map.json
+    try:
+        with open("title_map.json", "r", encoding="utf-8") as f:
+            title_map = json.load(f)
+    except Exception:
+        title_map = {}
+
     # Use constant for total document count
     total_docs = DOC_COUNT
 
@@ -353,15 +363,11 @@ def search_interface():
             idf_values = json.load(f)
     except Exception:
         idf_values = {}
-    # Load title_headline.json
-    try:
-        with open("title_headline.json", "r", encoding="utf-8") as f:
-            headline_tokens = json.load(f)
-    except Exception:
-        headline_tokens = {}
 
     while True:
         query = input("Search: ").strip()
+        import time
+        start_time = time.time()  # new line
         if query.lower() in {"exit", "q"}:
             print("Exiting search.")
             break
@@ -397,6 +403,7 @@ def search_interface():
 
         # Step 2: Scoring
         scores = defaultdict(float)
+        import re
         if phrase_docs:
             for doc_id in phrase_docs:
                 scores[doc_id] += 1000  # Strong phrase boost
@@ -410,14 +417,18 @@ def search_interface():
                         freq = len(postings_dict[term][doc_id]["positions"])
                         tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                         scores[doc_id] += tfidf
-                # Headline/title scoring
-                tokens_in_headline = headline_tokens.get(str(doc_id), {})
-                for term in terms:
-                    if term in tokens_in_headline:
-                        scores[doc_id] += 50
                 url = doc_map.get(str(doc_id), "")
-                if any(term in url.lower() for term in terms):
-                    scores[doc_id] += 10
+                url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                for term in terms:
+                    if term in url_tokens:
+                        scores[doc_id] += 15  # Stronger boost for term match in URL
+                    if term in url:
+                        scores[doc_id] += 10
+                # Title boosting
+                title = title_map.get(str(doc_id), "").lower()
+                for term in terms:
+                    if term in title:
+                        scores[doc_id] += 20
                 scores[doc_id] -= url.count('/')
         else:
             # fallback to AND-match with proximity
@@ -433,15 +444,21 @@ def search_interface():
                             freq = len(postings_dict[term][doc_id]["positions"])
                             tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                             scores[doc_id] += tfidf
-                    # Headline/title scoring
-                    tokens_in_headline = headline_tokens.get(str(doc_id), {})
-                    for term in terms:
-                        if term in tokens_in_headline:
-                            scores[doc_id] += 50
                     url = doc_map.get(str(doc_id), "")
-                    if any(term in url.lower() for term in terms):
-                        scores[doc_id] += 10
+                    url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                    for term in terms:
+                        if term in url_tokens:
+                            scores[doc_id] += 15  # Stronger boost for term match in URL
+                        if term in url:
+                            scores[doc_id] += 10
+                    # Title boosting
+                    title = title_map.get(str(doc_id), "").lower()
+                    for term in terms:
+                        if term in title:
+                            scores[doc_id] += 20
                     scores[doc_id] -= url.count('/')
+
+        print(f"Query processed in {(time.time() - start_time) * 1000:.2f} ms")  # new line
 
         if scores:
             # Sort and get up to top 5 results
