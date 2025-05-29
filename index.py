@@ -499,17 +499,16 @@ def split_index_by_prefix(final_index, output_dir="final_index"):
 
 # Phrase-in-document helper for phrase search (proximity-based)
 def phrase_in_doc(terms, doc_id, index, window_size=4):
-    if any(len(plist) > 2000 for plist in positions_lists):
-        return False  # Skip large documents
-
     try:
         positions_lists = [index[term][str(doc_id)]["positions"] for term in terms]
     except KeyError:
         return False
+    if any(len(plist) > 2000 for plist in positions_lists):
+        return False  # Skip large documents
 
     # Flatten and sort all positions
     all_positions = sorted(pos for plist in positions_lists for pos in plist)
-
+    
     # Check for any window of size len(terms) where max - min <= window_size
     for i in range(len(all_positions) - len(terms) + 1):
         window = all_positions[i + len(terms) - 1] - all_positions[i]
