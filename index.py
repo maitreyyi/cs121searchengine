@@ -263,9 +263,8 @@ def run_predefined_queries(doc_map, total_docs):
 
         common_docs = set.intersection(*candidate_docs)
 
-        if len(common_docs) > 1000:
-            print("Too many results — skipping deep scoring.")
-            continue
+        if len(common_docs) > 500:
+            common_docs = list(common_docs)[:500]
 
         phrase_docs = []
         for doc_id in common_docs:
@@ -316,9 +315,10 @@ def run_predefined_queries(doc_map, total_docs):
                             tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                             scores[doc_id] += tfidf
                     url = doc_map.get(str(doc_id), "")
-                    url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                    #url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                    url_lower = url.lower()
                     for term in terms:
-                        if term in url_tokens:
+                        if term in url_lower:
                             scores[doc_id] += 15  # Stronger boost for term match in URL
                         if term in url:
                             scores[doc_id] += 10
@@ -339,6 +339,15 @@ def run_predefined_queries(doc_map, total_docs):
         else:
             print("No documents matched this query.")
         print("-" * 50)
+idf_cache = {}
+
+def get_idf(term, total_docs, index):
+    if term in idf_cache:
+        return idf_cache[term]
+    df = len(index.get(term, {}))
+    idf = log((total_docs + 1) / (df + 1))
+    idf_cache[term] = idf
+    return idf
 
 def search_interface():
     # Load doc_map.json
@@ -403,7 +412,7 @@ def search_interface():
         # Step 1: Phrase Match Filtering (strict first)
         phrase_docs = []
         for doc_id in set.intersection(*candidate_docs):
-            if len(terms) < 3 and (terms, doc_id, postings_dict):
+            if len(terms) <= 3 and full_phrase_in_doc(terms, doc_id, postings_dict):
                 phrase_docs.append(doc_id)
 
         # Step 2: Scoring
@@ -420,10 +429,10 @@ def search_interface():
                 for term in terms:
                     if doc_id in postings_dict[term]:
                         freq = len(postings_dict[term][doc_id]["positions"])
-                        tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
+                        tfidf = (freq / doc_len) * get_idf(term, total_docs,postings_dict)
                         scores[doc_id] += tfidf
                 url = doc_map.get(str(doc_id), "")
-                url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                #url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
                 for term in terms:
                     if term in url_tokens:
                         scores[doc_id] += 15  # Stronger boost for term match in URL
@@ -450,9 +459,10 @@ def search_interface():
                             tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                             scores[doc_id] += tfidf
                     url = doc_map.get(str(doc_id), "")
-                    url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                    #url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                    url_lower = url.lower()
                     for term in terms:
-                        if term in url_tokens:
+                        if term in url_lower:
                             scores[doc_id] += 15  # Stronger boost for term match in URL
                         if term in url:
                             scores[doc_id] += 10
