@@ -172,12 +172,13 @@ def build_index():
 
     if temp_index:
         flush_partial_index(temp_index, flush_id)
-
-    with open("doc_map.json", "w", encoding="utf-8") as f:
-        json.dump(doc_map, f)
+    if not doc_map:
+        with open("doc_map.json", "w", encoding="utf-8") as f:
+            json.dump(doc_map, f)
     # Dump title_map to file
-    with open("title_map.json", "w", encoding="utf-8") as f:
-        json.dump(title_map, f)
+    if not title_map:
+        with open("title_map.json", "w", encoding="utf-8") as f:
+            json.dump(title_map, f)
 
     print("Merging partial indexes...")
     final_index = merge_indices(PARTIAL_INDEX_DIR)
@@ -262,14 +263,17 @@ def run_predefined_queries(doc_map, total_docs):
 
         common_docs = set.intersection(*candidate_docs)
 
+        if len(common_docs) > 1000:
+            print("Too many results — skipping deep scoring.")
+            continue
+
         phrase_docs = []
-        for doc_id in set.intersection(*candidate_docs):
+        for doc_id in common_docs:
             if full_phrase_in_doc(terms, doc_id, postings_dict):
                 phrase_docs.append(doc_id)
 
 
         scores = defaultdict(float)
-        import re
         if phrase_docs:
             for doc_id in phrase_docs:
                 scores[doc_id] += 1000  # Strong phrase boost
@@ -284,9 +288,10 @@ def run_predefined_queries(doc_map, total_docs):
                         tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
                         scores[doc_id] += tfidf
                 url = doc_map.get(str(doc_id), "")
-                url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                #url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                url_lower = url.lower()
                 for term in terms:
-                    if term in url_tokens:
+                    if term in url_lower:
                         scores[doc_id] += 15  # Stronger boost for term match in URL
                     if term in url:
                         scores[doc_id] += 10
@@ -398,7 +403,7 @@ def search_interface():
         # Step 1: Phrase Match Filtering (strict first)
         phrase_docs = []
         for doc_id in set.intersection(*candidate_docs):
-            if full_phrase_in_doc(terms, doc_id, postings_dict):
+            if len(terms) < 3 and (terms, doc_id, postings_dict):
                 phrase_docs.append(doc_id)
 
         # Step 2: Scoring
@@ -494,6 +499,9 @@ def split_index_by_prefix(final_index, output_dir="final_index"):
 
 # Phrase-in-document helper for phrase search (proximity-based)
 def phrase_in_doc(terms, doc_id, index, window_size=4):
+    if any(len(plist) > 2000 for plist in positions_lists):
+        return False  # Skip large documents
+
     try:
         positions_lists = [index[term][str(doc_id)]["positions"] for term in terms]
     except KeyError:
