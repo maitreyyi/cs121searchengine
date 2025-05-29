@@ -1,5 +1,3 @@
-
-
 import os
 import json
 import string
@@ -57,6 +55,10 @@ def write_analytics(index, doc_count):
         f.write(f"Index size on disk: {size_kb} KB\n")
 
 def build_index():
+    import hashlib
+    seen_hashes = set()
+    seen_token_sets = []
+
     temp_index = defaultdict(lambda: defaultdict(list))
     doc_count = 0
     flush_id = 0
@@ -89,8 +91,21 @@ def build_index():
                         tag.decompose()
                     main = soup.find("main") or soup.find("div", {"id": "main"}) or soup.body
                     text = main.get_text(separator=" ", strip=True) if main else ""
+
+                    content_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+                    if content_hash in seen_hashes:
+                        continue  # Skip exact duplicate
+                    seen_hashes.add(content_hash)
+
                     title_map[doc_id] = soup.title.string.strip() if soup.title and soup.title.string else ""
                     tokens = stem_tokens(tokenize(text))
+
+                    token_set = set(tokens)
+                    is_near_duplicate = any(len(token_set & prev) / len(token_set | prev) > 0.9 for prev in seen_token_sets)
+                    if is_near_duplicate:
+                        continue  # Skip near duplicate
+                    seen_token_sets.append(token_set)
+
                     for i, token in enumerate(tokens):
                         temp_index[token][doc_id].append(i)
                     doc_count += 1
