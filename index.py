@@ -433,8 +433,9 @@ def search_interface():
                         scores[doc_id] += tfidf
                 url = doc_map.get(str(doc_id), "")
                 #url_tokens = re.findall(r'\b[a-zA-Z0-9]+\b', url.lower())
+                url_lower = url.lower()
                 for term in terms:
-                    if term in url_tokens:
+                    if term in url_lower:
                         scores[doc_id] += 15  # Stronger boost for term match in URL
                     if term in url:
                         scores[doc_id] += 10
