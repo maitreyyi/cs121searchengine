@@ -62,6 +62,12 @@ def is_valid(url):
             return False
         if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
             return False
+
+        low_value_dirs = ["precision", "test", "demo", "features", "output", "logs"]
+        if url.lower().endswith(".txt"):
+            if any(f"/{dir}/" in url.lower() for dir in low_value_dirs):
+                return False
+
         for keyword in trap_keywords:
             if keyword == ".sql" and url.lower().endswith(".sql"):
                 return False
