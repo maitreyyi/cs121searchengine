@@ -52,7 +52,8 @@ def is_valid(url):
         "/calendar", "/event", "?action=login", "timeline?", "/history", "rev=", "version=", "/diff?version=", "?share=", "/?afg", "/img_", ".ppsx", "/git", "sort=", "orderby=",
         "/print/", "/export/", "/preview/", "/feed/", "sandbox", "staging", "test=", "/archive/", "/archives/", "/version/", "/versions/",
         "mailto:", "share=", "/backup/", "/mirror/", "admin=", "user=", "auth=", "captcha", "trackback", "?sessionid=", "?token=",
-        "releases/", "src/", "source/", ".svn/", "/build/", "/dist/", "/static/", "/tmp/", "/text-base/", "/props/", "/prop-base/", "/format", "/all-wcprops"
+        "releases/", "src/", "source/", ".svn/", "/build/", "/dist/", "/static/", "/tmp/", "/text-base/", "/props/", "/prop-base/", "/format", "/all-wcprops",
+        ".sql", "/attachment"
     ]
 
     try:
@@ -62,6 +63,10 @@ def is_valid(url):
         if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
             return False
         for keyword in trap_keywords:
+            if keyword == ".sql" and url.lower().endswith(".sql"):
+                return False
+            if keyword == "/attachment" and "/attachment" in url:
+                return False
             if keyword in url:
                 # Special handling for "releases/"
                 if keyword == "releases/" and not re.search(r"/releases/.+\.(html?|txt)$", url):
