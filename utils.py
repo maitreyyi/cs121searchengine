@@ -49,7 +49,7 @@ def is_valid(url):
     ]
 
     trap_keywords = [
-        "/calendar", "/event", "?action=login", "timeline?", "/history", "/diff?version=", "?share=", "/?afg", "/img_", ".ppsx", "/git", "sort=", "orderby=",
+        "/calendar", "/event", "?action=login", "timeline?", "/history", "rev=", "version=", "/diff?version=", "?share=", "/?afg", "/img_", ".ppsx", "/git", "sort=", "orderby=",
         "/print/", "/export/", "/preview/", "/feed/", "sandbox", "staging", "test=", "/archive/", "/archives/", "/version/", "/versions/",
         "mailto:", "share=", "/backup/", "/mirror/", "admin=", "user=", "auth=", "captcha", "trackback", "?sessionid=", "?token="
     ]
