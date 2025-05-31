@@ -4,6 +4,7 @@ import string
 from collections import defaultdict
 from math import log
 from bs4 import BeautifulSoup
+import hashlib
 
 from constants import DATA_DIR, PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE
 from utils import tokenize, stem_tokens, normalize_url, is_valid_url, stable_hash_url
@@ -55,7 +56,6 @@ def write_analytics(index, doc_count):
         f.write(f"Index size on disk: {size_kb} KB\n")
 
 def build_index():
-    import hashlib
     seen_hashes = set()
     seen_token_sets = []
 
@@ -97,14 +97,13 @@ def build_index():
                         continue  # Skip exact duplicate
                     seen_hashes.add(content_hash)
 
-                    title_map[doc_id] = soup.title.string.strip() if soup.title and soup.title.string else ""
-                    tokens = stem_tokens(tokenize(text))
-
-                    token_set = set(tokens)
-                    is_near_duplicate = any(len(token_set & prev) / len(token_set | prev) > 0.9 for prev in seen_token_sets)
+                    shingles = set(text.lower().split())  # basic token split
+                    is_near_duplicate = any(len(shingles & prev) / len(shingles | prev) > 0.9 for prev in seen_token_sets)
                     if is_near_duplicate:
-                        continue  # Skip near duplicate
-                    seen_token_sets.append(token_set)
+                        continue
+                    seen_token_sets.append(shingles)
+
+                    tokens = stem_tokens(tokenize(text))
 
                     for i, token in enumerate(tokens):
                         temp_index[token][doc_id].append(i)
