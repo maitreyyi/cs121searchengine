@@ -5,6 +5,7 @@ from collections import defaultdict
 from math import log
 from bs4 import BeautifulSoup
 import hashlib
+import pickle  # new line
 
 from constants import DATA_DIR, PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE
 from utils import tokenize, stem_tokens, normalize_url, is_valid_url, stable_hash_url
@@ -13,20 +14,16 @@ index_cache = {}
 
 def flush_partial_index(index, flush_id):
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
-    filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.json")
-    converted_index = {
-        token: {doc_id: {"positions": positions} for doc_id, positions in doc_freqs.items()}
-        for token, doc_freqs in index.items()
-    }
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(converted_index, f)
+    filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.pkl")  # new line
+    with open(filename, 'wb') as f:  # new line
+        pickle.dump(index, f)  # new line
 
 def merge_indices(partial_dir):
     final_index = defaultdict(dict)
     for filename in os.listdir(partial_dir):
-        if filename.endswith(".json"):
-            with open(os.path.join(partial_dir, filename), 'r', encoding='utf-8') as f:
-                partial = json.load(f)
+        if filename.endswith(".pkl"):  # new line
+            with open(os.path.join(partial_dir, filename), 'rb') as f:  # new line
+                partial = pickle.load(f)  # new line
                 for token, postings in partial.items():
                     for doc_id, posting in postings.items():
                         final_index[token][doc_id] = final_index[token].get(doc_id, {"positions": []})
