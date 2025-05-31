@@ -1,6 +1,5 @@
 import os
 import json
-import string
 from collections import defaultdict
 from math import log
 from bs4 import BeautifulSoup
@@ -9,42 +8,6 @@ import pickle
 import sqlite3
 import re  
 from urllib.parse import urlparse, urlunparse  
-
-# is_valid function implementation
-def is_valid(url):
-    valid_domains = [
-        "ics.uci.edu", "cs.uci.edu", "informatics.uci.edu",
-        "stat.uci.edu", "today.uci.edu/department/information_computer_sciences"
-    ]
-
-    trap_keywords = [
-        "/calendar", "/event", "?action=login", "timeline?", "/history", "/diff?version=", "?share=", "/?afg", "/img_", ".ppsx", "/git", "sort=", "orderby=",
-        "/print/", "/export/", "/preview/", "/feed/", "sandbox", "staging", "test=", "/archive/", "/archives/", "/version/", "/versions/",
-        "mailto:", "share=", "/backup/", "/mirror/", "admin=", "user=", "auth=", "captcha", "trackback", "?sessionid=", "?token="
-    ]
-
-    try:
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"}:
-            return False
-        if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
-            return False
-        for keyword in trap_keywords:
-            if keyword in url:
-                return False
-        return not re.match(
-            r".*\.(css|js|bmp|gif|jpe?g|ico"
-            r"|png|tiff?|mid|mp2|mp3|mp4"
-            r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-            r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
-            r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-            r"|epub|dll|cnf|tgz|sha1"
-            r"|thmx|mso|arff|rtf|jar|csv"
-            r"|rm|smil|wmv|swf|wma|zip|rar|gz|img|ppsx)$",
-            parsed.path.lower()
-        )
-    except TypeError:
-        return False
 
 from constants import DATA_DIR, PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE
 from utils import tokenize, stem_tokens, is_valid, stable_hash_url  # updated import
@@ -69,20 +32,6 @@ def merge_indices(partial_dir):
                         final_index[token][doc_id]["positions"].extend(posting.get("positions", []))
     return final_index
 
-def split_index_by_prefix(final_index):
-    os.makedirs(FINAL_INDEX_DIR, exist_ok=True)
-    split_index = {ch: {} for ch in string.ascii_lowercase}
-    split_index["other"] = {}
-    for term, postings in final_index.items():
-        prefix = term[0].lower()
-        if prefix in split_index:
-            split_index[prefix][term] = postings
-        else:
-            split_index["other"][term] = postings
-    for prefix, index_chunk in split_index.items():
-        path = os.path.join(FINAL_INDEX_DIR, f"index_{prefix}.json")
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(index_chunk, f)
 
 def write_analytics(index, doc_count):
     size_kb = sum(os.path.getsize(os.path.join(FINAL_INDEX_DIR, f)) for f in os.listdir(FINAL_INDEX_DIR)) // 1024
