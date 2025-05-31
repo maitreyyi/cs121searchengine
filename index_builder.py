@@ -14,6 +14,9 @@ from utils import tokenize, stem_tokens, is_valid, stable_hash_url  # updated im
 
 index_cache = {}
 
+def nested_defaultdict():
+    return defaultdict(list)
+
 def flush_partial_index(index, flush_id):
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
     filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.pkl")  # new line
@@ -60,8 +63,7 @@ def write_index_to_sqlite(index):
 def build_index():
     seen_hashes = set()
     seen_token_sets = []
-
-    temp_index = defaultdict(lambda: defaultdict(list))
+    temp_index = defaultdict(nested_defaultdict)
     doc_count = 0
     flush_id = 0
     doc_map = {}

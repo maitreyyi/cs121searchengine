@@ -51,7 +51,8 @@ def is_valid(url):
     trap_keywords = [
         "/calendar", "/event", "?action=login", "timeline?", "/history", "rev=", "version=", "/diff?version=", "?share=", "/?afg", "/img_", ".ppsx", "/git", "sort=", "orderby=",
         "/print/", "/export/", "/preview/", "/feed/", "sandbox", "staging", "test=", "/archive/", "/archives/", "/version/", "/versions/",
-        "mailto:", "share=", "/backup/", "/mirror/", "admin=", "user=", "auth=", "captcha", "trackback", "?sessionid=", "?token="
+        "mailto:", "share=", "/backup/", "/mirror/", "admin=", "user=", "auth=", "captcha", "trackback", "?sessionid=", "?token=",
+        "releases/", "src/", "source/", ".svn/", "/build/", "/dist/", "/static/", "/tmp/", "/text-base/", "/props/", "/prop-base/", "/format", "/all-wcprops"
     ]
 
     try:
@@ -62,7 +63,11 @@ def is_valid(url):
             return False
         for keyword in trap_keywords:
             if keyword in url:
-                return False
+                # Special handling for "releases/"
+                if keyword == "releases/" and not re.search(r"/releases/.+\.(html?|txt)$", url):
+                    return False
+                if keyword != "releases/":
+                    return False
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             r"|png|tiff?|mid|mp2|mp3|mp4"
