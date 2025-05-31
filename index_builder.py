@@ -8,6 +8,9 @@ import pickle
 import sqlite3
 import re  
 from urllib.parse import urlparse, urlunparse  
+from datasketch import MinHash, MinHashLSH
+import time
+import sys
 
 from constants import DATA_DIR, PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE
 from utils import tokenize, stem_tokens, is_valid, stable_hash_url  # updated import
@@ -52,6 +55,7 @@ def write_index_to_sqlite(index):
             postings TEXT
         )
     """)
+    cursor.execute("BEGIN TRANSACTION")
     for term, postings in index.items():
         cursor.execute(
             "INSERT OR REPLACE INTO inverted_index (term, postings) VALUES (?, ?)",
@@ -62,12 +66,14 @@ def write_index_to_sqlite(index):
 
 def build_index():
     seen_hashes = set()
-    seen_token_sets = []
     temp_index = defaultdict(nested_defaultdict)
     doc_count = 0
     flush_id = 0
+    start_time = time.time()
     doc_map = {}
-    title_map = {}
+
+    lsh = MinHashLSH(threshold=0.9, num_perm=128)
+    minhashes = {}
 
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
@@ -83,6 +89,9 @@ def build_index():
                     url = page.get("url", "")
                     if not url or not is_valid(url):
                         continue
+                    if doc_count % 1000 == 0 and doc_count > 0:
+                        elapsed = time.time() - start_time
+                        print(f"Processed {doc_count} documents in {elapsed:.2f} seconds")
                     print(f"Processing document {doc_count + 1}: {url}")
                     norm_url = url
                     doc_id = stable_hash_url(norm_url)
@@ -91,11 +100,14 @@ def build_index():
                     doc_map[doc_id] = norm_url
 
                     content = page.get("content", "")
-                    soup = BeautifulSoup(content, "html.parser")
+                    soup = BeautifulSoup(content, "lxml")
                     for tag in soup(["header", "footer", "nav", "aside", "script", "style"]):
                         tag.decompose()
                     main = soup.find("main") or soup.find("div", {"id": "main"}) or soup.body
                     text = main.get_text(separator=" ", strip=True) if main else ""
+
+                    if not text or len(text.split()) < 5:
+                        continue  # skip trivial or empty documents
 
                     content_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
                     if content_hash in seen_hashes:
@@ -103,12 +115,18 @@ def build_index():
                         continue  # Skip exact duplicate
                     seen_hashes.add(content_hash)
 
-                    shingles = set(text.lower().split())  # basic token split
-                    is_near_duplicate = any(len(shingles & prev) / len(shingles | prev) > 0.9 for prev in seen_token_sets)
-                    if is_near_duplicate:
+                    shingles = set(text.lower().split())
+                    mh = MinHash(num_perm=128)
+                    for shingle in shingles:
+                        mh.update(shingle.encode('utf8'))
+
+                    # Check for near duplicate
+                    if lsh.query(mh):
                         print(f"Skipped near duplicate: {url}")
                         continue
-                    seen_token_sets.append(shingles)
+
+                    lsh.insert(str(doc_count), mh)
+                    minhashes[doc_id] = mh
 
                     tokens = stem_tokens(tokenize(text))
 
@@ -130,9 +148,7 @@ def build_index():
 
     with open(DOC_MAP_FILE, "w", encoding="utf-8") as f:
         json.dump(doc_map, f)
-    with open(TITLE_MAP_FILE, "w", encoding="utf-8") as f:
-        json.dump(title_map, f)
-    print("Saved document and title maps")
+    print("Saved document map")
 
     final_index = merge_indices(PARTIAL_INDEX_DIR)
     print("Merged partial indices into final index")
