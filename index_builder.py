@@ -5,11 +5,49 @@ from collections import defaultdict
 from math import log
 from bs4 import BeautifulSoup
 import hashlib
-import pickle  # new line
+import pickle  
 import sqlite3
+import re  
+from urllib.parse import urlparse, urlunparse  
+
+# is_valid function implementation
+def is_valid(url):
+    valid_domains = [
+        "ics.uci.edu", "cs.uci.edu", "informatics.uci.edu",
+        "stat.uci.edu", "today.uci.edu/department/information_computer_sciences"
+    ]
+
+    trap_keywords = [
+        "/calendar", "/event", "?action=login", "timeline?", "/history", "/diff?version=", "?share=", "/?afg", "/img_", ".ppsx", "/git", "sort=", "orderby=",
+        "/print/", "/export/", "/preview/", "/feed/", "sandbox", "staging", "test=", "/archive/", "/archives/", "/version/", "/versions/",
+        "mailto:", "share=", "/backup/", "/mirror/", "admin=", "user=", "auth=", "captcha", "trackback", "?sessionid=", "?token="
+    ]
+
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
+            return False
+        for keyword in trap_keywords:
+            if keyword in url:
+                return False
+        return not re.match(
+            r".*\.(css|js|bmp|gif|jpe?g|ico"
+            r"|png|tiff?|mid|mp2|mp3|mp4"
+            r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
+            r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
+            r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
+            r"|epub|dll|cnf|tgz|sha1"
+            r"|thmx|mso|arff|rtf|jar|csv"
+            r"|rm|smil|wmv|swf|wma|zip|rar|gz|img|ppsx)$",
+            parsed.path.lower()
+        )
+    except TypeError:
+        return False
 
 from constants import DATA_DIR, PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE
-from utils import tokenize, stem_tokens, normalize_url, is_valid_url, stable_hash_url
+from utils import tokenize, stem_tokens, is_valid, stable_hash_url  # updated import
 
 index_cache = {}
 
@@ -92,10 +130,10 @@ def build_index():
                 try:
                     page = json.load(f)
                     url = page.get("url", "")
-                    if not url or not is_valid_url(url):
+                    if not url or not is_valid(url):
                         continue
                     print(f"Processing document {doc_count + 1}: {url}")
-                    norm_url = normalize_url(url)
+                    norm_url = url
                     doc_id = stable_hash_url(norm_url)
                     if doc_id in doc_map:
                         continue
