@@ -79,6 +79,7 @@ def build_index():
                     url = page.get("url", "")
                     if not url or not is_valid_url(url):
                         continue
+                    print(f"Processing document {doc_count + 1}: {url}")
                     norm_url = normalize_url(url)
                     doc_id = stable_hash_url(norm_url)
                     if doc_id in doc_map:
@@ -94,12 +95,14 @@ def build_index():
 
                     content_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
                     if content_hash in seen_hashes:
+                        print(f"Skipped exact duplicate: {url}")
                         continue  # Skip exact duplicate
                     seen_hashes.add(content_hash)
 
                     shingles = set(text.lower().split())  # basic token split
                     is_near_duplicate = any(len(shingles & prev) / len(shingles | prev) > 0.9 for prev in seen_token_sets)
                     if is_near_duplicate:
+                        print(f"Skipped near duplicate: {url}")
                         continue
                     seen_token_sets.append(shingles)
 
@@ -113,24 +116,31 @@ def build_index():
 
             if doc_count % PARTIAL_FLUSH_LIMIT == 0:
                 flush_partial_index(temp_index, flush_id)
+                print(f"Flushed partial index {flush_id} with {doc_count} documents")
                 temp_index.clear()
                 flush_id += 1
 
     if temp_index:
         flush_partial_index(temp_index, flush_id)
+        print(f"Final flush completed with flush ID {flush_id}")
 
     with open(DOC_MAP_FILE, "w", encoding="utf-8") as f:
         json.dump(doc_map, f)
     with open(TITLE_MAP_FILE, "w", encoding="utf-8") as f:
         json.dump(title_map, f)
+    print("Saved document and title maps")
 
     final_index = merge_indices(PARTIAL_INDEX_DIR)
+    print("Merged partial indices into final index")
     idf_values = {token: log(doc_count / len(postings)) for token, postings in final_index.items()}
     with open(IDF_FILE, "w", encoding="utf-8") as f:
         json.dump(idf_values, f)
+    print("Saved IDF values")
 
     split_index_by_prefix(final_index)
+    print("Split final index by prefix")
     write_analytics(final_index, doc_count)
+    print("Wrote analytics to file")
 
 def load_postings_for_term(term, index_dir=FINAL_INDEX_DIR):
     prefix = term[0].lower() if term[0].isalpha() else "other"
