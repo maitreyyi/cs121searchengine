@@ -35,7 +35,7 @@ def merge_indices(partial_dir):
                 for token, postings in partial.items():
                     for doc_id, posting in postings.items():
                         final_index[token][doc_id] = final_index[token].get(doc_id, {"positions": []})
-                        final_index[token][doc_id]["positions"].extend(posting.get("positions", []))
+                        final_index[token][doc_id]["positions"].extend(posting, [])
     return final_index
 
 
