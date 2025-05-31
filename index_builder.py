@@ -6,6 +6,7 @@ from math import log
 from bs4 import BeautifulSoup
 import hashlib
 import pickle  # new line
+import sqlite3
 
 from constants import DATA_DIR, PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE
 from utils import tokenize, stem_tokens, normalize_url, is_valid_url, stable_hash_url
@@ -51,6 +52,23 @@ def write_analytics(index, doc_count):
         f.write(f"Documents indexed: {doc_count}\n")
         f.write(f"Unique tokens: {len(index)}\n")
         f.write(f"Index size on disk: {size_kb} KB\n")
+
+def write_index_to_sqlite(index):
+    conn = sqlite3.connect("final_index.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS inverted_index (
+            term TEXT PRIMARY KEY,
+            postings TEXT
+        )
+    """)
+    for term, postings in index.items():
+        cursor.execute(
+            "INSERT OR REPLACE INTO inverted_index (term, postings) VALUES (?, ?)",
+            (term, json.dumps(postings))
+        )
+    conn.commit()
+    conn.close()
 
 def build_index():
     seen_hashes = set()
@@ -134,23 +152,18 @@ def build_index():
         json.dump(idf_values, f)
     print("Saved IDF values")
 
-    split_index_by_prefix(final_index)
-    print("Split final index by prefix")
+    write_index_to_sqlite(final_index)
+    print("Saved final index to SQLite database")
     write_analytics(final_index, doc_count)
     print("Wrote analytics to file")
 
-def load_postings_for_term(term, index_dir=FINAL_INDEX_DIR):
-    prefix = term[0].lower() if term[0].isalpha() else "other"
-    path = os.path.join(index_dir, f"index_{prefix}.json")
-    if not os.path.exists(path):
-        return {}, 0
-    if path in index_cache:
-        index = index_cache[path]
-    else:
-        with open(path, "r", encoding="utf-8") as f:
-            index = json.load(f)
-            index_cache[path] = index
-    if term in index:
-        postings = {doc_id: {"positions": posting.get("positions", [])} for doc_id, posting in index[term].items()}
+def load_postings_for_term(term, db_path="final_index.db"):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT postings FROM inverted_index WHERE term=?", (term,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        postings = json.loads(row[0])
         return postings, len(postings)
     return {}, 0
