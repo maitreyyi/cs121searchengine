@@ -45,11 +45,6 @@ def normalize_url(url):
     
 # is_valid function implementation
 def is_valid(url):
-    valid_domains = [
-        "ics.uci.edu", "cs.uci.edu", "informatics.uci.edu",
-        "stat.uci.edu", "today.uci.edu/department/information_computer_sciences"
-    ]
-
     trap_keywords = [
         "/calendar", "/event", "?action=login", "timeline?", "/history", "rev=", "version=", "/diff?version=", "?share=", "/?afg", "/img_", ".ppsx", "/git", "sort=", "orderby=",
         "/print/", "/export/", "/preview/", "/feed/", "sandbox", "staging", "test=", "/archive/", "/archives/", "/version/", "/versions/",
@@ -62,9 +57,6 @@ def is_valid(url):
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
             return False
-        if not any(parsed.netloc.endswith(domain) for domain in valid_domains):
-            return False
-
         low_value_dirs = ["precision", "test", "demo", "features", "output", "logs"]
         if url.lower().endswith(".txt"):
             if any(f"/{dir}/" in url.lower() for dir in low_value_dirs):
