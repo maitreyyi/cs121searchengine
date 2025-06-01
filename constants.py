@@ -12,8 +12,8 @@ ANALYTICS_FILE = "analytics.txt"
 DOC_MAP_FILE = "doc_map.json"
 TITLE_MAP_FILE = "title_map.json"
 IDF_FILE = "idf.json"
-PAGERANK_FILE = "pagerank.json"
-
+#PAGERANK_FILE = "pagerank.json"
+HEADING_MAP_FILE = "heading_map.json"
 # Indexing limits
 PARTIAL_FLUSH_LIMIT = 5000
 DOC_COUNT = 55393  # Total number of documents

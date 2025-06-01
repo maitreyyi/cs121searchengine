@@ -72,6 +72,8 @@ def build_index():
     flush_id = 0
     start_time = time.time()
     doc_map = {}
+    title_map = {}
+    heading_map = {}
 
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
@@ -104,10 +106,15 @@ def build_index():
                     doc_id = stable_hash_url(norm_url)
                     if doc_id in doc_map:
                         continue
-                    doc_map[doc_id] = norm_url
 
                     content = page.get("content", "")
                     soup = BeautifulSoup(content, "lxml")
+                    title = soup.title.get_text(strip=True).lower() if soup.title else ""
+                    headings = ' '.join(h.get_text(strip=True) for h in soup.find_all(['h1', 'h2', 'h3'])).lower()
+
+                    title_map[doc_id] = title
+                    heading_map[doc_id] = headings
+
                     for tag in soup(["header", "footer", "nav", "aside", "script", "style"]):
                         tag.decompose()
                     main = soup.find("main") or soup.find("div", {"id": "main"}) or soup.body
@@ -145,6 +152,7 @@ def build_index():
                     for i, token in enumerate(tokens):
                         temp_index[token][doc_id].append(i)
 
+                    doc_map[doc_id] = norm_url
                     doc_count += 1
                 except Exception as e:
                     print(f"[ERROR] Failed to process {file}: {e}")
@@ -163,6 +171,11 @@ def build_index():
     with open(DOC_MAP_FILE, "w", encoding="utf-8") as f:
         json.dump(doc_map, f)
     print("Saved document map")
+
+    with open("title_map.json", "w", encoding="utf-8") as f:
+        json.dump(title_map, f)
+    with open("heading_map.json", "w", encoding="utf-8") as f:
+        json.dump(heading_map, f)
 
     final_index = merge_indices(PARTIAL_INDEX_DIR)
     print("Merged partial indices into final index")

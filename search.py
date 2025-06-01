@@ -3,11 +3,11 @@ import time
 from collections import defaultdict
 from scoring import full_phrase_in_doc, score_document
 from utils import process_query_terms, is_live_url
-from constants import DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE, DOC_COUNT
+from constants import DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE, DOC_COUNT, HEADING_MAP_FILE
 from index_builder import load_postings_for_term
 from requests import head
 
-def run_query(query, doc_map, idf_values, title_map, test_mode=False):
+def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=False):
     terms = process_query_terms(query)
     candidate_docs = []
     postings_dict = {}
@@ -42,27 +42,43 @@ def run_query(query, doc_map, idf_values, title_map, test_mode=False):
 
     scores = defaultdict(float)
     start_time = time.time()
+    phrase_match_count = 0
+
     for doc_id in docs_to_score:
         matched_terms = [term for term in terms if doc_id in postings_dict.get(term, {})]
         if not matched_terms:
             continue
-
-        print(f"Doc {doc_id}: matched {len(matched_terms)}/{len(terms)} terms")
 
         coverage = len(matched_terms) / len(terms)
 
         is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict) if coverage == 1.0 else False
 
         if is_phrase_match:
-            print(f"Doc {doc_id}: PHRASE MATCH")
+            phrase_match_count += 1
 
         base_score = score_document(
             doc_id, terms, postings_dict, idf_values, title_map, doc_map,
-            phrase_boost=(1000 if is_phrase_match else 0), require_all_terms=False
+            phrase_boost=(50 if is_phrase_match else 0), require_all_terms=False
         )
-        print(f"Doc {doc_id}: base_score={base_score:.2f}, coverage={coverage:.2f}, final_score={base_score * coverage:.2f}")
+
+        if title_map:
+            title = title_map.get(str(doc_id), "").lower()
+            if all(term in title for term in terms):
+                base_score += 30
+
+        if heading_map:
+            headings = heading_map.get(str(doc_id), "").lower()
+            if all(term in headings for term in terms):
+                base_score += 20
+
         scores[doc_id] = base_score * coverage
+
     elapsed = time.time() - start_time
+    phrase_ratio = phrase_match_count / len(docs_to_score) if docs_to_score else 0
+
+    if phrase_ratio > 0.1:
+        for doc_id in scores:
+            scores[doc_id] *= 0.5
 
     if test_mode:
         print(f"Query: {query}")
@@ -134,9 +150,15 @@ def run_predefined_queries(doc_map, total_docs, test):
     except Exception:
         title_map = {}
 
+    try:
+        with open(HEADING_MAP_FILE, "r", encoding="utf-8") as f:
+            heading_map = json.load(f)
+    except Exception:
+        heading_map = {}
+
     for idx, q in enumerate(test_queries, 1):
         print(f"\n{idx}. Query: {q} ")
-        run_query(q, doc_map, idf_values, title_map, test_mode=True)
+        run_query(q, doc_map, idf_values, title_map, heading_map, test_mode=True)
 
 def search_interface():
     try:
@@ -157,6 +179,12 @@ def search_interface():
     except Exception:
         idf_values = {}
 
+    try:
+        with open(HEADING_MAP_FILE, "r", encoding="utf-8") as f:
+            heading_map = json.load(f)
+    except Exception:
+        heading_map = {}
+
     print("\nSearch Engine Project")      
     print("What do you want to look for today?\n")
 
@@ -175,4 +203,4 @@ def search_interface():
             run_predefined_queries(doc_map, DOC_COUNT, 1)
             continue
 
-        run_query(query, doc_map, idf_values, title_map)
+        run_query(query, doc_map, idf_values, title_map, heading_map)
