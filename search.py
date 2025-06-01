@@ -46,8 +46,6 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
 
     for doc_id in docs_to_score:
         url = doc_map.get(str(doc_id), "")
-        if not is_live_url(url):
-            continue
 
         matched_terms = [term for term in terms if doc_id in postings_dict.get(term, {})]
         if not matched_terms:

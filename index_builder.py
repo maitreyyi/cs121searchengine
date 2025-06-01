@@ -98,6 +98,9 @@ def build_index():
                     url = page.get("url", "")
                     if not url or not is_valid(url):
                         continue
+                    if not is_live_url(url):
+                        print(f"[SKIP] Dead URL: {url}")
+                        continue
                     if doc_count % 1000 == 0 and doc_count > 0:
                         elapsed = time.time() - start_time
                         print(f"Processed {doc_count} documents in {elapsed:.2f} seconds")
