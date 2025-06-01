@@ -45,6 +45,10 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
     phrase_match_count = 0
 
     for doc_id in docs_to_score:
+        url = doc_map.get(str(doc_id), "")
+        if not is_live_url(url):
+            continue
+
         matched_terms = [term for term in terms if doc_id in postings_dict.get(term, {})]
         if not matched_terms:
             matched_terms = []
@@ -92,9 +96,8 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
         for doc_id, score in top_docs:
             url = doc_map.get(str(doc_id), "")
             print(f"[DEBUG] Doc {doc_id} score: {score:.2f}")
-            if is_live_url(url):
-                print(f"{shown + 1}. {url}")
-                shown += 1
+            print(f"{shown + 1}. {url}")
+            shown += 1
             if shown == 5:
                 break
     else:
