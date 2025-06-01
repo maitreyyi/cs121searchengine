@@ -13,7 +13,7 @@ import time
 import sys
 
 from constants import DATA_DIR, PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE
-from utils import tokenize, stem_tokens, is_valid, stable_hash_url  # updated import
+from utils import tokenize, stem_tokens, is_valid, is_live_url, stable_hash_url
 
 index_cache = {}
 
@@ -91,7 +91,7 @@ def build_index():
                 try:
                     page = json.load(f)
                     url = page.get("url", "")
-                    if not url or not is_valid(url):
+                    if not url or not is_valid(url)  or not is_live_url(url):
                         continue
                     if doc_count % 1000 == 0 and doc_count > 0:
                         elapsed = time.time() - start_time

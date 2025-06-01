@@ -11,7 +11,12 @@ def get_idf(term, total_docs, index):
     idf_cache[term] = idf
     return idf
 
+
 def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc_map=None, phrase_boost=1000):
+    # ✅ Ensure the document contains all query terms in the body
+    if any(doc_id not in postings_dict.get(term, {}) for term in terms):
+        return 0.0
+
     score = 0.0
     doc_len = sum(
         len(postings_dict[t][doc_id]["positions"])
@@ -24,6 +29,7 @@ def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc
             tfidf = (freq / doc_len) * idf_values.get(term, 0) if doc_len > 0 else 0
             score += tfidf
 
+    # ✅ Only apply URL and title boosts *after* ensuring main content has all terms
     if doc_map:
         url = doc_map.get(str(doc_id), "")
         url_lower = url.lower()
@@ -40,8 +46,11 @@ def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc
             if term in title:
                 score += 20
 
+    # ✅ Phrase boost is only applied if explicitly passed in (e.g., 1000 for phrase matches, 0 otherwise)
     score += phrase_boost
+
     return score
+
 
 def phrase_in_doc(terms, doc_id, index, window_size=4):
     try:
@@ -57,6 +66,7 @@ def phrase_in_doc(terms, doc_id, index, window_size=4):
         if window <= window_size:
             return True
     return False
+
 
 def full_phrase_in_doc(terms, doc_id, postings_dict):
     try:

@@ -5,12 +5,16 @@ from scoring import phrase_in_doc, full_phrase_in_doc, score_document
 from utils import process_query_terms
 from constants import DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE, DOC_COUNT
 from index_builder import load_postings_for_term
+from requests import head
 
+def is_url_alive(url):
+    try:
+        res = head(url, timeout=3, allow_redirects=True)
+        return res.status_code < 400
+    except:
+        return False
 
-def run_predefined_queries(doc_map, total_docs, test ):
-    
-
-    # Define test cases
+def run_predefined_queries(doc_map, total_docs, test):
     test_queries = []
     if test == 0:
         test_queries = [
@@ -21,7 +25,6 @@ def run_predefined_queries(doc_map, total_docs, test ):
         ]
     elif test == 1:
         test_queries = [
-            # High - performance
             "cristina lopes",
             "master of software engineering",
             "machine learning",
@@ -35,7 +38,6 @@ def run_predefined_queries(doc_map, total_docs, test ):
             "data science tracks",
             "academic integrity policy",
             "website accessibility standards",
-            # Low-performance
             "cs course prerequisites",
             "uci parking pass",
             "cafeteria menu",
@@ -57,8 +59,8 @@ def run_predefined_queries(doc_map, total_docs, test ):
     except Exception:
         title_map = {}
 
-    for q in test_queries:
-        print(f"\nQuery: {q}")
+    for idx, q in enumerate(test_queries, 1):
+        print(f"\n{idx}. Query: {q} ")
         start_time = time.time()
         terms = process_query_terms(q)
         candidate_docs = []
@@ -73,32 +75,46 @@ def run_predefined_queries(doc_map, total_docs, test ):
 
         if not candidate_docs:
             print("No documents matched this query.")
+            print("-" * 50)
             continue
 
         common_docs = set.intersection(*candidate_docs)
-        phrase_docs = [doc_id for doc_id in common_docs if full_phrase_in_doc(terms, doc_id, postings_dict)]
+        if not common_docs:
+            print("No common documents with all query terms.")
+            print("-" * 50)
+            continue
+
+        docs_to_score = list(common_docs)
 
         scores = defaultdict(float)
-        for doc_id in phrase_docs:
-            scores[doc_id] = score_document(doc_id, terms, postings_dict, idf_values, title_map, doc_map)
+        for doc_id in docs_to_score:
+            is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict)
+            scores[doc_id] = score_document(
+                doc_id, terms, postings_dict, idf_values, title_map, doc_map,
+                phrase_boost=(1000 if is_phrase_match else 0)
+            )
 
         top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
         elapsed = time.time() - start_time
         print(f"Query processed in {elapsed * 1000:.2f} ms")
 
         if top_docs:
-            for i, (doc_id, _) in enumerate(top_docs, 1):
-                print(f"{i}. {doc_map.get(str(doc_id), '')}")
+            shown = 0
+            for doc_id, _ in top_docs:
+                url = doc_map.get(str(doc_id), "")
+                if not is_url_alive(url):
+                    continue
+                shown += 1
+                print(f"{shown}. {url}")
+                if shown == 5:
+                    break
+
         else:
-            print("No documents matched after fallback.")
+            print("No documents matched after scoring.")
         print("-" * 50)
 
 
-
 def search_interface():
-
-    test = 0
-
     try:
         with open(DOC_MAP_FILE, "r", encoding="utf-8") as f:
             doc_map = json.load(f)
@@ -124,19 +140,15 @@ def search_interface():
     print("Type 'm3' to run A3:M3 predefined queries.\n")
     print("Type 'exit' or 'q' to quit.")
 
-    test = 0
-
     while True:
         query = input("Search: ").strip()
         if query.lower() in {"exit", "q"}:
             break
         if query.lower() == "m2":
-            test = 0
-            run_predefined_queries(doc_map, DOC_COUNT, test)
+            run_predefined_queries(doc_map, DOC_COUNT, 0)
             continue
         if query.lower() == "m3":
-            test = 1
-            run_predefined_queries(doc_map, DOC_COUNT, test)
+            run_predefined_queries(doc_map, DOC_COUNT, 1)
             continue
 
         start = time.time()
@@ -158,16 +170,32 @@ def search_interface():
             continue
 
         common_docs = set.intersection(*candidate_docs)
-        phrase_docs = [doc_id for doc_id in common_docs if full_phrase_in_doc(terms, doc_id, postings_dict)]
+        if not common_docs:
+            print("No common documents with all query terms.")
+            continue
+
+        docs_to_score = list(common_docs)
 
         scores = defaultdict(float)
-        for doc_id in phrase_docs:
-            scores[doc_id] = score_document(doc_id, terms, postings_dict, idf_values, title_map, doc_map)
+        for doc_id in docs_to_score:
+            is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict)
+            scores[doc_id] = score_document(
+                doc_id, terms, postings_dict, idf_values, title_map, doc_map,
+                phrase_boost=(1000 if is_phrase_match else 0)
+            )
 
         print(f"Query processed in {(time.time() - start) * 1000:.2f} ms")
         if scores:
             top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
-            for i, (doc_id, _) in enumerate(top_docs, 1):
-                print(f"{i}. {doc_map.get(str(doc_id), '')}")
+            shown = 0
+            for doc_id, _ in top_docs:
+                url = doc_map.get(str(doc_id), "")
+                if not is_url_alive(url):
+                    continue
+                shown += 1
+                print(f"{shown}. {url}")
+                if shown == 5:
+                    break
+
         else:
             print("No documents matched.")

@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from nltk.stem import PorterStemmer
 import nltk
+import requests
 
 from constants import STOPWORDS
 
@@ -91,4 +92,12 @@ def is_valid(url):
             parsed.path.lower()
         )
     except TypeError:
+        return False
+
+def is_live_url(url):
+    """Returns True if the URL responds with a status_code < 400."""
+    try:
+        res = requests.head(url, timeout=3, allow_redirects=True)
+        return res.status_code < 400
+    except Exception:
         return False
