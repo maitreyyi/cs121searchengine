@@ -12,7 +12,7 @@ from datasketch import MinHash, MinHashLSH
 import time
 import sys
 
-from constants import DATA_DIR, PARTIAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, IDF_FILE
+from constants import DATA_DIR, PARTIAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT
 from utils import tokenize, stem_tokens, is_valid, is_live_url, stable_hash_url
 
 index_cache = {}
