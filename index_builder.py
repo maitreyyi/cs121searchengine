@@ -12,7 +12,7 @@ from datasketch import MinHash, MinHashLSH
 import time
 import sys
 
-from constants import DATA_DIR, PARTIAL_INDEX_DIR, FINAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, IDF_FILE
+from constants import DATA_DIR, PARTIAL_INDEX_DIR, ANALYTICS_FILE, PARTIAL_FLUSH_LIMIT, DOC_MAP_FILE, IDF_FILE
 from utils import tokenize, stem_tokens, is_valid, is_live_url, stable_hash_url
 
 index_cache = {}
@@ -41,7 +41,7 @@ def merge_indices(partial_dir):
 
 
 def write_analytics(index, doc_count):
-    size_kb = sum(os.path.getsize(os.path.join(FINAL_INDEX_DIR, f)) for f in os.listdir(FINAL_INDEX_DIR)) // 1024
+    size_kb = os.path.getsize("final_index.db") // 1024
     with open(ANALYTICS_FILE, 'w') as f:
         f.write(f"Documents indexed: {doc_count}\n")
         f.write(f"Unique tokens: {len(index)}\n")
@@ -95,10 +95,6 @@ def build_index():
             os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
     
-    if os.path.exists(FINAL_INDEX_DIR):
-        for f in os.listdir(FINAL_INDEX_DIR):
-            os.remove(os.path.join(FINAL_INDEX_DIR, f))
-    os.makedirs(FINAL_INDEX_DIR, exist_ok=True)
 
     lsh = MinHashLSH(threshold=0.95, num_perm=128)
     minhashes = {}

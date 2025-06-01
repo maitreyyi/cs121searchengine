@@ -44,7 +44,7 @@ def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc
         title = title_map.get(str(doc_id), "").lower()
         for term in terms:
             if term in title:
-                score += 25
+                score += 100  # increased boost for title
 
     if heading_map:
         headings = heading_map.get(str(doc_id), "")
@@ -54,11 +54,11 @@ def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc
                 heading_lower = heading.lower()
                 if term in heading_lower:
                     if i == 0:
-                        score += 10  # h1
+                        score += 50  # h1
                     elif i == 1:
-                        score += 8  # h2
+                        score += 35  # h2
                     elif i == 2:
-                        score += 6  # h3
+                        score += 20  # h3
 
     # Phrase boost is only applied if explicitly passed in (e.g., 1000 for phrase matches, 0 otherwise)
     score += phrase_boost

@@ -6,6 +6,42 @@ from utils import process_query_terms, is_live_url
 from constants import DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE, DOC_COUNT, HEADING_MAP_FILE
 from index_builder import load_postings_for_term
 from requests import head
+import sqlite3
+
+def get_db_connection():
+    return sqlite3.connect("final_index.db")
+
+def get_doc_map():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT doc_id, url FROM doc_map")
+    doc_map = {str(doc_id): url for doc_id, url in cur.fetchall()}
+    conn.close()
+    return doc_map
+
+def get_title_map():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT doc_id, title FROM title_map")
+    title_map = {str(doc_id): title for doc_id, title in cur.fetchall()}
+    conn.close()
+    return title_map
+
+def get_heading_map():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT doc_id, headings FROM heading_map")
+    heading_map = {str(doc_id): headings for doc_id, headings in cur.fetchall()}
+    conn.close()
+    return heading_map
+
+def get_idf_values():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT term, idf FROM idf")
+    idf_values = {term: float(idf) for term, idf in cur.fetchall()}
+    conn.close()
+    return idf_values
 
 def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=False):
     terms = process_query_terms(query)
@@ -129,52 +165,20 @@ def run_predefined_queries(doc_map, total_docs, test):
             "staff office hours",
         ]
 
-    try:
-        with open(IDF_FILE, "r", encoding="utf-8") as f:
-            idf_values = json.load(f)
-    except Exception:
-        idf_values = {}
-
-    try:
-        with open(TITLE_MAP_FILE, "r", encoding="utf-8") as f:
-            title_map = json.load(f)
-    except Exception:
-        title_map = {}
-
-    try:
-        with open(HEADING_MAP_FILE, "r", encoding="utf-8") as f:
-            heading_map = json.load(f)
-    except Exception:
-        heading_map = {}
+    doc_map = get_doc_map()
+    title_map = get_title_map()
+    heading_map = get_heading_map()
+    idf_values = get_idf_values()
 
     for idx, q in enumerate(test_queries, 1):
         print(f"\n{idx}. Query: {q} ")
         run_query(q, doc_map, idf_values, title_map, heading_map, test_mode=True)
 
 def search_interface():
-    try:
-        with open(DOC_MAP_FILE, "r", encoding="utf-8") as f:
-            doc_map = json.load(f)
-    except Exception:
-        doc_map = {}
-
-    try:
-        with open(TITLE_MAP_FILE, "r", encoding="utf-8") as f:
-            title_map = json.load(f)
-    except Exception:
-        title_map = {}
-
-    try:
-        with open(IDF_FILE, "r", encoding="utf-8") as f:
-            idf_values = json.load(f)
-    except Exception:
-        idf_values = {}
-
-    try:
-        with open(HEADING_MAP_FILE, "r", encoding="utf-8") as f:
-            heading_map = json.load(f)
-    except Exception:
-        heading_map = {}
+    doc_map = get_doc_map()
+    title_map = get_title_map()
+    idf_values = get_idf_values()
+    heading_map = get_heading_map()
 
     print("\nSearch Engine Project")      
     print("What do you want to look for today?\n")
