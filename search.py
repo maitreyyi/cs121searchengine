@@ -47,14 +47,20 @@ def run_query(query, doc_map, idf_values, title_map, test_mode=False):
         if not matched_terms:
             continue
 
+        print(f"Doc {doc_id}: matched {len(matched_terms)}/{len(terms)} terms")
+
         coverage = len(matched_terms) / len(terms)
 
         is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict) if coverage == 1.0 else False
+
+        if is_phrase_match:
+            print(f"Doc {doc_id}: PHRASE MATCH")
 
         base_score = score_document(
             doc_id, terms, postings_dict, idf_values, title_map, doc_map,
             phrase_boost=(1000 if is_phrase_match else 0), require_all_terms=False
         )
+        print(f"Doc {doc_id}: base_score={base_score:.2f}, coverage={coverage:.2f}, final_score={base_score * coverage:.2f}")
         scores[doc_id] = base_score * coverage
     elapsed = time.time() - start_time
 
