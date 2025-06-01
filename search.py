@@ -1,7 +1,7 @@
 import json
 import time
 from collections import defaultdict
-from scoring import phrase_in_doc, full_phrase_in_doc, score_document
+from scoring import full_phrase_in_doc, score_document
 from utils import process_query_terms, is_live_url
 from constants import DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE, DOC_COUNT
 from index_builder import load_postings_for_term
