@@ -96,9 +96,20 @@ def is_valid(url):
         return False
 
 
+import socket
+
 @lru_cache(maxsize=10000)
 def is_live_url(url, timeout=0.5):
-    """Returns True if the URL responds with a status_code < 400, using a short timeout."""
+    """Returns True if the URL's domain resolves and responds with status_code < 400."""
+    try:
+        hostname = urlparse(url).hostname
+        if hostname:
+            socket.gethostbyname(hostname)
+        else:
+            return False
+    except socket.error:
+        return False
+
     try:
         res = requests.head(url, timeout=timeout, allow_redirects=True)
         if res.status_code >= 400 or res.status_code == 405:
