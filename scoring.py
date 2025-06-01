@@ -50,15 +50,14 @@ def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc
         headings = heading_map.get(str(doc_id), "")
         headings = headings.split("\n") if isinstance(headings, str) else []
         for term in terms:
-            for i, heading in enumerate(headings):
+            for heading in headings:
                 heading_lower = heading.lower()
-                if term in heading_lower:
-                    if i == 0:
-                        score += 50  # h1
-                    elif i == 1:
-                        score += 35  # h2
-                    elif i == 2:
-                        score += 20  # h3
+                if heading_lower.startswith("h1:") and term in heading_lower:
+                    score += 50
+                elif heading_lower.startswith("h2:") and term in heading_lower:
+                    score += 35
+                elif heading_lower.startswith("h3:") and term in heading_lower:
+                    score += 20
 
     # Phrase boost is only applied if explicitly passed in (e.g., 1000 for phrase matches, 0 otherwise)
     score += phrase_boost

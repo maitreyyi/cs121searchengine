@@ -139,7 +139,10 @@ def build_index():
                     content = page.get("content", "")
                     soup = BeautifulSoup(content, "lxml")
                     title = soup.title.get_text(strip=True).lower() if soup.title else ""
-                    headings = ' '.join(h.get_text(strip=True) for h in soup.find_all(['h1', 'h2', 'h3'])).lower()
+                    h1 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h1')).lower()
+                    h2 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h2')).lower()
+                    h3 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h3')).lower()
+                    headings = f"{h1} {h2} {h3}"
 
                     title_map[doc_id] = title
                     heading_map[doc_id] = headings
