@@ -43,11 +43,19 @@ def run_query(query, doc_map, idf_values, title_map, test_mode=False):
     scores = defaultdict(float)
     start_time = time.time()
     for doc_id in docs_to_score:
-        is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict)
-        scores[doc_id] = score_document(
+        matched_terms = [term for term in terms if doc_id in postings_dict.get(term, {})]
+        if not matched_terms:
+            continue
+
+        coverage = len(matched_terms) / len(terms)
+
+        is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict) if coverage == 1.0 else False
+
+        base_score = score_document(
             doc_id, terms, postings_dict, idf_values, title_map, doc_map,
             phrase_boost=(1000 if is_phrase_match else 0), require_all_terms=False
         )
+        scores[doc_id] = base_score * coverage
     elapsed = time.time() - start_time
 
     if test_mode:
