@@ -47,7 +47,7 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
     for doc_id in docs_to_score:
         matched_terms = [term for term in terms if doc_id in postings_dict.get(term, {})]
         if not matched_terms:
-            continue
+            matched_terms = []
 
         coverage = len(matched_terms) / len(terms)
 
@@ -64,21 +64,21 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
         if title_map:
             title = title_map.get(str(doc_id), "").lower()
             if all(term in title for term in terms):
-                base_score += 30
+                base_score += 20
 
         if heading_map:
             headings = heading_map.get(str(doc_id), "").lower()
             if all(term in headings for term in terms):
-                base_score += 20
+                base_score += 15
 
         scores[doc_id] = base_score * coverage
 
     elapsed = time.time() - start_time
     phrase_ratio = phrase_match_count / len(docs_to_score) if docs_to_score else 0
 
-    if phrase_ratio > 0.1:
+    if 0.1 < phrase_ratio < 0.9:
         for doc_id in scores:
-            scores[doc_id] *= 0.5
+            scores[doc_id] *= 0.85
 
     if test_mode:
         print(f"Query: {query}")
