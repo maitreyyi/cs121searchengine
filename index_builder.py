@@ -47,11 +47,12 @@ def write_analytics(index, doc_count):
         f.write(f"Unique tokens: {len(index)}\n")
         f.write(f"Index size on disk: {size_kb} KB\n")
 
-def write_index_to_sqlite(index, doc_map, title_map, heading_map):
+def write_index_to_sqlite(index, doc_map, title_map, heading_map, idf_values=None):
     conn = sqlite3.connect("final_index.db")
     cursor = conn.cursor()
     cursor.execute("DROP TABLE IF EXISTS inverted_index")
     cursor.execute("DROP TABLE IF EXISTS doc_metadata")
+    cursor.execute("DROP TABLE IF EXISTS idf")
     cursor.execute("""
         CREATE TABLE inverted_index (
             term TEXT PRIMARY KEY,
@@ -66,6 +67,12 @@ def write_index_to_sqlite(index, doc_map, title_map, heading_map):
             headings TEXT
         )
     """)
+    cursor.execute("""
+        CREATE TABLE idf (
+            term TEXT PRIMARY KEY,
+            idf REAL
+        )
+    """)
     cursor.execute("BEGIN TRANSACTION")
     for term, postings in index.items():
         cursor.execute(
@@ -77,6 +84,12 @@ def write_index_to_sqlite(index, doc_map, title_map, heading_map):
             "INSERT OR REPLACE INTO doc_metadata (doc_id, url, title, headings) VALUES (?, ?, ?, ?)",
             (doc_id, doc_map[doc_id], title_map.get(doc_id, ""), heading_map.get(doc_id, ""))
         )
+    if idf_values:
+        for term, idf in idf_values.items():
+            cursor.execute(
+                "INSERT OR REPLACE INTO idf (term, idf) VALUES (?, ?)",
+                (term, idf)
+            )
     conn.commit()
     conn.close()
 
@@ -191,11 +204,8 @@ def build_index():
     print("Merged partial indices into final index")
 
     idf_values = {token: log(doc_count / len(postings)) for token, postings in final_index.items()}
-    with open(IDF_FILE, "w", encoding="utf-8") as f:
-        json.dump(idf_values, f)
-    print("Saved IDF values")
 
-    write_index_to_sqlite(final_index, doc_map, title_map, heading_map)
+    write_index_to_sqlite(final_index, doc_map, title_map, heading_map, idf_values)
     print("Saved final index to SQLite database")
     write_analytics(final_index, doc_count)
     print("Wrote analytics to file")
