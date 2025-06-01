@@ -59,19 +59,9 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
             phrase_match_count += 1
 
         base_score = score_document(
-            doc_id, terms, postings_dict, idf_values, title_map, doc_map,
+            doc_id, terms, postings_dict, idf_values, title_map, doc_map, heading_map,
             phrase_boost=(50 if is_phrase_match else 0), require_all_terms=False
         )
-
-        if title_map:
-            title = title_map.get(str(doc_id), "").lower()
-            if all(term in title for term in terms):
-                base_score += 20
-
-        if heading_map:
-            headings = heading_map.get(str(doc_id), "").lower()
-            if all(term in headings for term in terms):
-                base_score += 15
 
         scores[doc_id] = base_score * coverage
 

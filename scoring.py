@@ -12,7 +12,7 @@ def get_idf(term, total_docs, index):
     return idf
 
 
-def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc_map=None, phrase_boost=1000, require_all_terms=True):
+def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc_map=None, heading_map=None, phrase_boost=1000, require_all_terms=True):
     # Ensure the document contains all query terms in the body
     if require_all_terms and any(doc_id not in postings_dict.get(term, {}) for term in terms):
         return 0.0
@@ -45,6 +45,20 @@ def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc
         for term in terms:
             if term in title:
                 score += 3
+
+    if heading_map:
+        headings = heading_map.get(str(doc_id), "")
+        headings = headings.split("\n") if isinstance(headings, str) else []
+        for term in terms:
+            for i, heading in enumerate(headings):
+                heading_lower = heading.lower()
+                if term in heading_lower:
+                    if i == 0:
+                        score += 10  # h1
+                    elif i == 1:
+                        score += 8  # h2
+                    elif i == 2:
+                        score += 6  # h3
 
     # Phrase boost is only applied if explicitly passed in (e.g., 1000 for phrase matches, 0 otherwise)
     score += phrase_boost

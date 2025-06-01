@@ -96,7 +96,9 @@ def build_index():
                 try:
                     page = json.load(f)
                     url = page.get("url", "")
-                    if not url or not is_valid(url):
+                    if not url:
+                        continue
+                    if not is_valid(url):
                         continue
                     if not is_live_url(url):
                         print(f"[SKIP] Dead URL: {url}")
