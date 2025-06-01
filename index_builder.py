@@ -47,13 +47,23 @@ def write_analytics(index, doc_count):
         f.write(f"Unique tokens: {len(index)}\n")
         f.write(f"Index size on disk: {size_kb} KB\n")
 
-def write_index_to_sqlite(index):
+def write_index_to_sqlite(index, doc_map, title_map, heading_map):
     conn = sqlite3.connect("final_index.db")
     cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS inverted_index")
+    cursor.execute("DROP TABLE IF EXISTS doc_metadata")
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS inverted_index (
+        CREATE TABLE inverted_index (
             term TEXT PRIMARY KEY,
             postings TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE doc_metadata (
+            doc_id TEXT PRIMARY KEY,
+            url TEXT,
+            title TEXT,
+            headings TEXT
         )
     """)
     cursor.execute("BEGIN TRANSACTION")
@@ -61,6 +71,11 @@ def write_index_to_sqlite(index):
         cursor.execute(
             "INSERT OR REPLACE INTO inverted_index (term, postings) VALUES (?, ?)",
             (term, json.dumps(postings))
+        )
+    for doc_id in doc_map:
+        cursor.execute(
+            "INSERT OR REPLACE INTO doc_metadata (doc_id, url, title, headings) VALUES (?, ?, ?, ?)",
+            (doc_id, doc_map[doc_id], title_map.get(doc_id, ""), heading_map.get(doc_id, ""))
         )
     conn.commit()
     conn.close()
@@ -173,14 +188,8 @@ def build_index():
         flush_partial_index(temp_index, flush_id)
         print(f"Final flush completed with flush ID {flush_id}")
 
-    with open(DOC_MAP_FILE, "w", encoding="utf-8") as f:
-        json.dump(doc_map, f)
-    print("Saved document map")
-
-    with open("title_map.json", "w", encoding="utf-8") as f:
-        json.dump(title_map, f)
-    with open("heading_map.json", "w", encoding="utf-8") as f:
-        json.dump(heading_map, f)
+    # Write index to SQLite before merging partial indices
+    write_index_to_sqlite({}, doc_map, title_map, heading_map)
 
     final_index = merge_indices(PARTIAL_INDEX_DIR)
     print("Merged partial indices into final index")
@@ -190,7 +199,7 @@ def build_index():
         json.dump(idf_values, f)
     print("Saved IDF values")
 
-    write_index_to_sqlite(final_index)
+    write_index_to_sqlite(final_index, doc_map, title_map, heading_map)
     print("Saved final index to SQLite database")
     write_analytics(final_index, doc_count)
     print("Wrote analytics to file")
