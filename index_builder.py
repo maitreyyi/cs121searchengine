@@ -21,13 +21,10 @@ def nested_defaultdict():
     return defaultdict(list)
 
 def flush_partial_index(index, flush_id):
-    if os.path.exists(PARTIAL_INDEX_DIR):
-        for f in os.listdir(PARTIAL_INDEX_DIR):
-            os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
-    filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.pkl")  # new line
-    with open(filename, 'wb') as f:  # new line
-        pickle.dump(index, f)  # new line
+    filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.pkl")
+    with open(filename, 'wb') as f:
+        pickle.dump(index, f)
 
 def merge_indices(partial_dir):
     final_index = defaultdict(dict)
@@ -86,7 +83,7 @@ def build_index():
             os.remove(os.path.join(FINAL_INDEX_DIR, f))
     os.makedirs(FINAL_INDEX_DIR, exist_ok=True)
 
-    lsh = MinHashLSH(threshold=0.9, num_perm=128)
+    lsh = MinHashLSH(threshold=0.95, num_perm=128)
     minhashes = {}
 
     for root, _, files in os.walk(DATA_DIR):

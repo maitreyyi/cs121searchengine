@@ -2,17 +2,78 @@ import json
 import time
 from collections import defaultdict
 from scoring import phrase_in_doc, full_phrase_in_doc, score_document
-from utils import process_query_terms
+from utils import process_query_terms, is_live_url
 from constants import DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE, DOC_COUNT
 from index_builder import load_postings_for_term
 from requests import head
 
-def is_url_alive(url):
-    try:
-        res = head(url, timeout=3, allow_redirects=True)
-        return res.status_code < 400
-    except:
-        return False
+def run_query(query, doc_map, idf_values, title_map, test_mode=False):
+    terms = process_query_terms(query)
+    candidate_docs = []
+    postings_dict = {}
+
+    for term in terms:
+        postings, df = load_postings_for_term(term)
+        if df == 0:
+            if test_mode:
+                continue
+            else:
+                print(f"Missing term: {term} in index --- abort")
+                return
+        postings_dict[term] = postings
+        candidate_docs.append(set(postings.keys()))
+
+    if not candidate_docs:
+        if test_mode:
+            print("No documents matched this query.")
+        else:
+            print("No documents matched.")
+        return
+
+    common_docs = set.union(*candidate_docs)
+    if not common_docs:
+        if test_mode:
+            print("No common documents with any query terms.")
+        else:
+            print("No common documents with all query terms.")
+        return
+
+    docs_to_score = list(common_docs)
+
+    scores = defaultdict(float)
+    start_time = time.time()
+    for doc_id in docs_to_score:
+        is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict)
+        scores[doc_id] = score_document(
+            doc_id, terms, postings_dict, idf_values, title_map, doc_map,
+            phrase_boost=(1000 if is_phrase_match else 0), require_all_terms=False
+        )
+    elapsed = time.time() - start_time
+
+    if test_mode:
+        print(f"Query: {query}")
+        print(f"Query processed in {elapsed * 1000:.2f} ms")
+    else:
+        print(f"Query processed in {elapsed * 1000:.2f} ms")
+
+    if scores:
+        top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
+        shown = 0
+        for doc_id, _ in top_docs:
+            url = doc_map.get(str(doc_id), "")
+            if not is_live_url(url):
+                continue
+            shown += 1
+            print(f"{shown}. {url}")
+            if shown == 5:
+                break
+    else:
+        if test_mode:
+            print("No documents matched after scoring.")
+        else:
+            print("No documents matched.")
+
+    print("-" * 50)
 
 def run_predefined_queries(doc_map, total_docs, test):
     test_queries = []
@@ -61,58 +122,7 @@ def run_predefined_queries(doc_map, total_docs, test):
 
     for idx, q in enumerate(test_queries, 1):
         print(f"\n{idx}. Query: {q} ")
-        start_time = time.time()
-        terms = process_query_terms(q)
-        candidate_docs = []
-        postings_dict = {}
-
-        for term in terms:
-            postings, df = load_postings_for_term(term)
-            if df == 0:
-                continue
-            postings_dict[term] = postings
-            candidate_docs.append(set(postings.keys()))
-
-        if not candidate_docs:
-            print("No documents matched this query.")
-            print("-" * 50)
-            continue
-
-        common_docs = set.intersection(*candidate_docs)
-        if not common_docs:
-            print("No common documents with all query terms.")
-            print("-" * 50)
-            continue
-
-        docs_to_score = list(common_docs)
-
-        scores = defaultdict(float)
-        for doc_id in docs_to_score:
-            is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict)
-            scores[doc_id] = score_document(
-                doc_id, terms, postings_dict, idf_values, title_map, doc_map,
-                phrase_boost=(1000 if is_phrase_match else 0)
-            )
-
-        top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
-        elapsed = time.time() - start_time
-        print(f"Query processed in {elapsed * 1000:.2f} ms")
-
-        if top_docs:
-            shown = 0
-            for doc_id, _ in top_docs:
-                url = doc_map.get(str(doc_id), "")
-                if not is_url_alive(url):
-                    continue
-                shown += 1
-                print(f"{shown}. {url}")
-                if shown == 5:
-                    break
-
-        else:
-            print("No documents matched after scoring.")
-        print("-" * 50)
-
+        run_query(q, doc_map, idf_values, title_map, test_mode=True)
 
 def search_interface():
     try:
@@ -151,51 +161,4 @@ def search_interface():
             run_predefined_queries(doc_map, DOC_COUNT, 1)
             continue
 
-        start = time.time()
-        terms = process_query_terms(query)
-        candidate_docs = []
-        postings_dict = {}
-
-        for term in terms:
-            postings, df = load_postings_for_term(term)
-            if df == 0:
-                print(f"Missing term: {term} in index --- abort")
-                candidate_docs = []
-                break
-            postings_dict[term] = postings
-            candidate_docs.append(set(postings.keys()))
-
-        if not candidate_docs:
-            print("No documents matched.")
-            continue
-
-        common_docs = set.intersection(*candidate_docs)
-        if not common_docs:
-            print("No common documents with all query terms.")
-            continue
-
-        docs_to_score = list(common_docs)
-
-        scores = defaultdict(float)
-        for doc_id in docs_to_score:
-            is_phrase_match = full_phrase_in_doc(terms, doc_id, postings_dict)
-            scores[doc_id] = score_document(
-                doc_id, terms, postings_dict, idf_values, title_map, doc_map,
-                phrase_boost=(1000 if is_phrase_match else 0)
-            )
-
-        print(f"Query processed in {(time.time() - start) * 1000:.2f} ms")
-        if scores:
-            top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
-            shown = 0
-            for doc_id, _ in top_docs:
-                url = doc_map.get(str(doc_id), "")
-                if not is_url_alive(url):
-                    continue
-                shown += 1
-                print(f"{shown}. {url}")
-                if shown == 5:
-                    break
-
-        else:
-            print("No documents matched.")
+        run_query(query, doc_map, idf_values, title_map)

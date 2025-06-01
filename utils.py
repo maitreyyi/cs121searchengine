@@ -98,6 +98,8 @@ def is_live_url(url):
     """Returns True if the URL responds with a status_code < 400."""
     try:
         res = requests.head(url, timeout=3, allow_redirects=True)
+        if res.status_code >= 400 or res.status_code == 405:
+            res = requests.get(url, stream=True, timeout=3)
         return res.status_code < 400
     except Exception:
         return False
