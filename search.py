@@ -30,7 +30,7 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
             print("No documents matched.")
         return
 
-    common_docs = set.intersection(*candidate_docs)
+    common_docs = set.union(*candidate_docs)
     if not common_docs:
         if test_mode:
             print("No common documents with any query terms.")
@@ -71,8 +71,7 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
             if all(term in headings for term in terms):
                 base_score += 15
 
-        if coverage >= 0.25:
-            scores[doc_id] = base_score * coverage
+        scores[doc_id] = base_score * coverage
 
     elapsed = time.time() - start_time
     phrase_ratio = phrase_match_count / len(docs_to_score) if docs_to_score else 0
@@ -91,12 +90,11 @@ def run_query(query, doc_map, idf_values, title_map, heading_map, test_mode=Fals
         top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5]
         shown = 0
         for doc_id, score in top_docs:
-            print(f"[DEBUG] Doc {doc_id} score: {score:.2f}")
             url = doc_map.get(str(doc_id), "")
-            if not is_live_url(url):
-                continue
-            shown += 1
-            print(f"{shown}. {url}")
+            print(f"[DEBUG] Doc {doc_id} score: {score:.2f}")
+            if is_live_url(url):
+                print(f"{shown + 1}. {url}")
+                shown += 1
             if shown == 5:
                 break
     else:
