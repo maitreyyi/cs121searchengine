@@ -35,7 +35,8 @@ def merge_indices(partial_dir):
                 for token, postings in partial.items():
                     for doc_id, posting in postings.items():
                         final_index[token][doc_id] = final_index[token].get(doc_id, {"positions": []})
-                        final_index[token][doc_id]["positions"].extend(posting, [])
+                        final_index[token][doc_id]["positions"].extend(posting)
+
     return final_index
 
 
@@ -72,6 +73,9 @@ def build_index():
     start_time = time.time()
     doc_map = {}
 
+    os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
+    os.makedirs(FINAL_INDEX_DIR, exist_ok=True)
+
     lsh = MinHashLSH(threshold=0.9, num_perm=128)
     minhashes = {}
 
@@ -106,13 +110,20 @@ def build_index():
                     main = soup.find("main") or soup.find("div", {"id": "main"}) or soup.body
                     text = main.get_text(separator=" ", strip=True) if main else ""
 
-                    if not text or len(text.split()) < 5:
-                        continue  # skip trivial or empty documents
+                    if not text:
+                        print(f"[SKIP] Empty main text in {url}")
+                        continue
+
+                    if len(text.split()) < 5:
+                        print(f"[SKIP] Too short: {len(text.split())} words in {url}")
+                        continue
+
+                    print(f"[CONTENT PREVIEW] {text[:100]}...")  # Optional: show first 100 chars
 
                     content_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
                     if content_hash in seen_hashes:
-                        print(f"Skipped exact duplicate: {url}")
-                        continue  # Skip exact duplicate
+                        print(f"[SKIP] Exact duplicate: {url}")
+                        continue
                     seen_hashes.add(content_hash)
 
                     shingles = set(text.lower().split())
@@ -120,20 +131,20 @@ def build_index():
                     for shingle in shingles:
                         mh.update(shingle.encode('utf8'))
 
-                    # Check for near duplicate
                     if lsh.query(mh):
-                        print(f"Skipped near duplicate: {url}")
+                        print(f"[SKIP] Near duplicate (MinHash): {url}")
                         continue
 
                     lsh.insert(str(doc_count), mh)
                     minhashes[doc_id] = mh
 
                     tokens = stem_tokens(tokenize(text))
-
                     for i, token in enumerate(tokens):
                         temp_index[token][doc_id].append(i)
+
                     doc_count += 1
-                except Exception:
+                except Exception as e:
+                    print(f"[ERROR] Failed to process {file}: {e}")
                     continue
 
             if doc_count % PARTIAL_FLUSH_LIMIT == 0:
@@ -152,6 +163,7 @@ def build_index():
 
     final_index = merge_indices(PARTIAL_INDEX_DIR)
     print("Merged partial indices into final index")
+
     idf_values = {token: log(doc_count / len(postings)) for token, postings in final_index.items()}
     with open(IDF_FILE, "w", encoding="utf-8") as f:
         json.dump(idf_values, f)
@@ -161,6 +173,7 @@ def build_index():
     print("Saved final index to SQLite database")
     write_analytics(final_index, doc_count)
     print("Wrote analytics to file")
+
 
 def load_postings_for_term(term, db_path="final_index.db"):
     conn = sqlite3.connect(db_path)
