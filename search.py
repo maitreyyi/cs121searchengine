@@ -3,7 +3,7 @@ import time
 from collections import defaultdict
 from scoring import full_phrase_in_doc, score_document
 from utils import process_query_terms, is_live_url
-from constants import DOC_MAP_FILE, TITLE_MAP_FILE, IDF_FILE, DOC_COUNT, HEADING_MAP_FILE
+from constants import DOC_COUNT
 from index_builder import load_postings_for_term
 from requests import head
 import sqlite3
