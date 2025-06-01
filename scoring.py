@@ -44,7 +44,7 @@ def score_document(doc_id, terms, postings_dict, idf_values, title_map=None, doc
         title = title_map.get(str(doc_id), "").lower()
         for term in terms:
             if term in title:
-                score += 3
+                score += 25
 
     if heading_map:
         headings = heading_map.get(str(doc_id), "")
