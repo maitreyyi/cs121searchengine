@@ -21,6 +21,9 @@ def nested_defaultdict():
     return defaultdict(list)
 
 def flush_partial_index(index, flush_id):
+    if os.path.exists(PARTIAL_INDEX_DIR):
+        for f in os.listdir(PARTIAL_INDEX_DIR):
+            os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
     filename = os.path.join(PARTIAL_INDEX_DIR, f"partial_{flush_id}.pkl")  # new line
     with open(filename, 'wb') as f:  # new line
@@ -73,15 +76,18 @@ def build_index():
     start_time = time.time()
     doc_map = {}
 
+    if os.path.exists(PARTIAL_INDEX_DIR):
+        for f in os.listdir(PARTIAL_INDEX_DIR):
+            os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
     os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
+    
+    if os.path.exists(FINAL_INDEX_DIR):
+        for f in os.listdir(FINAL_INDEX_DIR):
+            os.remove(os.path.join(FINAL_INDEX_DIR, f))
     os.makedirs(FINAL_INDEX_DIR, exist_ok=True)
 
     lsh = MinHashLSH(threshold=0.9, num_perm=128)
     minhashes = {}
-
-    if os.path.exists(PARTIAL_INDEX_DIR):
-        for f in os.listdir(PARTIAL_INDEX_DIR):
-            os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
 
     for root, _, files in os.walk(DATA_DIR):
         for file in files:
