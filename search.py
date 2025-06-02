@@ -14,7 +14,7 @@ def get_db_connection():
 def get_doc_map():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT doc_id, url FROM doc_map")
+    cur.execute("SELECT doc_id, url FROM doc_metadata")
     doc_map = {str(doc_id): url for doc_id, url in cur.fetchall()}
     conn.close()
     return doc_map
@@ -22,7 +22,7 @@ def get_doc_map():
 def get_title_map():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT doc_id, title FROM title_map")
+    cur.execute("SELECT doc_id, title FROM doc_metadata")
     title_map = {str(doc_id): title for doc_id, title in cur.fetchall()}
     conn.close()
     return title_map
@@ -30,7 +30,7 @@ def get_title_map():
 def get_heading_map():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT doc_id, headings FROM heading_map")
+    cur.execute("SELECT doc_id, headings FROM doc_metadata")
     heading_map = {str(doc_id): headings for doc_id, headings in cur.fetchall()}
     conn.close()
     return heading_map
