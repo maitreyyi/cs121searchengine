@@ -106,7 +106,8 @@ def build_index():
     if os.path.exists(PARTIAL_INDEX_DIR):
         for f in os.listdir(PARTIAL_INDEX_DIR):
             os.remove(os.path.join(PARTIAL_INDEX_DIR, f))
-    os.makedirs(PARTIAL_INDEX_DIR, exist_ok=True)
+    else:
+        os.makedirs(PARTIAL_INDEX_DIR)
     
 
     lsh = MinHashLSH(threshold=0.95, num_perm=128)
@@ -138,14 +139,14 @@ def build_index():
 
                     content = page.get("content", "")
                     soup = BeautifulSoup(content, "lxml")
-                    title = soup.title.get_text(strip=True).lower() if soup.title else ""
-                    h1 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h1')).lower()
-                    h2 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h2')).lower()
-                    h3 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h3')).lower()
+                    title = soup.title.get_text(strip=True) if soup.title else ""
+                    h1 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h1'))
+                    h2 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h2'))
+                    h3 = ' '.join(h.get_text(strip=True) for h in soup.find_all('h3'))
                     headings = f"{h1} {h2} {h3}"
 
-                    title_map[doc_id] = title
-                    heading_map[doc_id] = headings
+                    title_map[doc_id] = title.lower()
+                    heading_map[doc_id] = headings.lower()
 
                     for tag in soup(["header", "footer", "nav", "aside", "script", "style"]):
                         tag.decompose()
@@ -156,8 +157,9 @@ def build_index():
                         print(f"[SKIP] Empty main text in {url}")
                         continue
 
-                    if len(text.split()) < 5:
-                        print(f"[SKIP] Too short: {len(text.split())} words in {url}")
+                    word_count = len(text.split())
+                    if word_count < 5:
+                        print(f"[SKIP] Too short: {word_count} words in {url}")
                         continue
 
                     print(f"[CONTENT PREVIEW] {text[:100]}...")  # Optional: show first 100 chars
