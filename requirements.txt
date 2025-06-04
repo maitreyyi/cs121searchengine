@@ -2,4 +2,3 @@ nltk
 bs4
 datasketch
 requests
-Flask
